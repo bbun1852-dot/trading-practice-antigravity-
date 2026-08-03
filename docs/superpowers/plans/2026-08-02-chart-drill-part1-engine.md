@@ -2064,6 +2064,29 @@ git commit -m "feat(analysis): 신호 통합기 + 전체 look-ahead 무결성 �
 
 ---
 
+## Task 13: 감지 경로 테스트 보강 (Task 12 완료 후)
+
+실행 중 리뷰에서 **미검증 경로 갭이 체계적 수준**으로 드러났다. 이 계획이 태스크마다
+"대표 케이스 1~2개"만 테스트로 명세한 결과, 구현은 맞는데 회귀를 잡을 그물이 없는
+경로가 4개 태스크에 걸쳐 13개 이상 쌓였다. 그리고 그 갭 안에서 실제 버그가 하나 나왔다
+(`candle_tweezer` 의 `else if` 가 하락 분기를 도달불가로 만든 건, 전용 테스트가 없어서 통과).
+
+이론적 위험이 아니라는 것이 증명되었으므로 전용 태스크로 메운다.
+
+| 출처 | 보강 대상 | 비고 |
+|---|---|---|
+| Task 4 | RSI Wilder 재귀 | 기존 테스트는 `avgLoss===0` / `avgGain===0` 축퇴 분기만 탄다. 혼합 등락 데이터 + 손계산 기대값 `toBeCloseTo(x, 2)` |
+| Task 7 | `fvg_bear`, `ob_bear_resistance` | 하락 분기는 `lo`/`hi` 배정과 임펄스 기준 산술이 상승과 독립 |
+| Task 8 | `liq_sweep_high`, `msb_bear` | look-ahead 제네릭만 통과 중, 의미 검증 없음 |
+| Task 9 | `candle_inv_hammer` · `candle_doji` · `candle_long_wick` · `candle_bull_harami` · `candle_bear_harami` · `candle_evening_star` · `candle_three_crows` · `candle_tri_star` | 16종 중 8종 (tweezer는 수정 시 함께 테스트됨) |
+
+각 테스트는 **양성 케이스와 음성 케이스를 모두** 포함한다 — 패턴이 발화하는 캔들과,
+조건을 아슬아슬하게 못 채워 발화하지 않아야 하는 캔들. 양성만 있으면 조건을 느슨하게
+바꿔도 통과하므로 회귀 그물이 되지 못한다.
+
+기대값은 구현을 돌려 얻지 말고 규칙표에서 직접 유도한다. 구현 출력을 기대값으로 복사하면
+버그를 정답으로 고정시키게 된다.
+
 ## Part 2 예정 태스크 (별도 계획 문서)
 
 감지 계층(Task 1~12)이 완성되고 `npm test` 가 전부 통과한 뒤,

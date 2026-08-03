@@ -59,7 +59,8 @@ export function detectCandlePatterns(cs: Candle[]): Signal[] {
       }
       if (Math.abs(c.low - p.low) <= 0.001 * c.low) {
         out.push(sig('candle_tweezer', 'bullish', i, `저점 ${c.low.toFixed(2)} 이 직전 봉과 일치 (트위저 바텀)`, 1))
-      } else if (Math.abs(c.high - p.high) <= 0.001 * c.high) {
+      }
+      if (Math.abs(c.high - p.high) <= 0.001 * c.high) {
         out.push(sig('candle_tweezer', 'bearish', i, `고점 ${c.high.toFixed(2)} 이 직전 봉과 일치 (트위저 탑)`, 1))
       }
     }

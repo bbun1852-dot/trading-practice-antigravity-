@@ -50,6 +50,26 @@ describe('detectCandlePatterns', () => {
     expect(idsAt(cs, 1)).toContain('candle_inside_bar')
   })
 
+  it('트위저 바텀: 저점만 일치하면 상승 신호만 발생한다', () => {
+    const cs = [mk(100, 105, 95, 102, 100, 0), mk(103, 115, 95.05, 110, 100, 1)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
+    expect(tweezers).toHaveLength(1)
+    expect(tweezers[0].side).toBe('bullish')
+  })
+
+  it('트위저 탑: 고점만 일치하면 하락 신호만 발생한다', () => {
+    const cs = [mk(100, 110, 95, 103, 100, 0), mk(104, 110.05, 90, 95, 100, 1)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
+    expect(tweezers).toHaveLength(1)
+    expect(tweezers[0].side).toBe('bearish')
+  })
+
+  it('트위저: 저점과 고점이 모두 일치하면 상승·하락 신호가 둘 다 발생한다 (회귀)', () => {
+    const cs = [mk(100, 110, 95, 103, 100, 0), mk(101, 110.05, 95.05, 104, 100, 1)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
+    expect(tweezers.map((s) => s.side).sort()).toEqual(['bearish', 'bullish'])
+  })
+
   it('look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectCandlePatterns, synthCandles(220))
   })
