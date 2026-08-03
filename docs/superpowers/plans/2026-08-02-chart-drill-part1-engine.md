@@ -127,17 +127,27 @@ npm install -D typescript vite vitest
     "isolatedModules": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts"]
 }
 ```
+
+`include` 에 `vite.config.ts` 를 넣는 이유: `["src"]` 만 넣으면 루트의 설정 파일이
+typecheck 대상에서 **아예 빠진다.** 그러면 설정에 오타가 나도 `npm run typecheck` 는
+통과하고 런타임에서야 터진다. Part 2에서 `environment` 를 `jsdom` 으로 바꾸고
+`setupFiles` 를 추가할 때 이 차이가 드러난다.
 
 - [ ] **Step 4: vite.config.ts 작성**
 
 Part 1은 순수 함수와 테스트뿐이라 `node` 환경이면 충분하다.
 Part 2에서 React 컴포넌트 테스트를 추가할 때 `jsdom` 으로 바꾼다.
 
+**`defineConfig` 는 반드시 `'vitest/config'` 에서 import한다.** `'vite'` 에서 가져오면
+`test` 키가 `UserConfigExport` 타입에 없어서 `TS2769` 가 난다. Vitest의 타입 augmentation은
+`vitest` 가 `node_modules` 에 설치돼 있는 것만으로는 적용되지 않고, 무언가가
+`'vitest/config'` 를 import해야 로드된다.
+
 ```ts
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
