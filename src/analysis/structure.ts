@@ -30,35 +30,44 @@ export function findPivots(cs: Candle[], n = 2): Pivot[] {
 }
 
 /**
- * 마지막 확정 시점 기준으로 추세를 판정한다.
- * 최근 스윙하이 2개와 스윙로우 2개를 비교: HH+HL=상승, LH+LL=하락, 그 외 횡보.
+ * 각 피벗 확정 시점마다 그 시점까지의 정보로 추세를 판정한다.
+ * 피벗을 barIndex 오름차순으로 순회하며, 매 피벗의 barIndex를 at이라 할 때
+ * barIndex <= at 인 피벗만 사용해 최근 스윙하이 2개와 스윙로우 2개를 비교한다
+ * (pivotBar로 거르면 미래참조가 된다 — 확정 전 피벗을 써버리게 된다).
+ * HH+HL=상승, LH+LL=하락, 그 외 횡보. 양쪽 모두 2개 이상 모였을 때만 신호를 낸다.
  */
 export function detectTrend(cs: Candle[]): Signal[] {
   const pivots = findPivots(cs, 2)
-  if (pivots.length === 0) return []
-  const last = pivots[pivots.length - 1].barIndex
+  const out: Signal[] = []
+  // 같은 봉에 스윙하이·스윙로우가 동시에 확정될 수 있으므로 barIndex를 중복 없이 순회한다
+  // (findPivots는 이미 barIndex 오름차순으로 정렬되어 있다).
+  const confirmBars = [...new Set(pivots.map((p) => p.barIndex))]
 
-  const highs = pivots.filter((p) => p.kind === 'high').slice(-2)
-  const lows = pivots.filter((p) => p.kind === 'low').slice(-2)
-  if (highs.length < 2 || lows.length < 2) return []
+  for (const at of confirmBars) {
+    const available = pivots.filter((p) => p.barIndex <= at)
+    const highs = available.filter((p) => p.kind === 'high').slice(-2)
+    const lows = available.filter((p) => p.kind === 'low').slice(-2)
+    if (highs.length < 2 || lows.length < 2) continue
 
-  const hh = highs[1].price > highs[0].price
-  const hl = lows[1].price > lows[0].price
-  const lh = highs[1].price < highs[0].price
-  const ll = lows[1].price < lows[0].price
+    const hh = highs[1].price > highs[0].price
+    const hl = lows[1].price > lows[0].price
+    const lh = highs[1].price < highs[0].price
+    const ll = lows[1].price < lows[0].price
 
-  const base = { tier: 3 as const, kind: 'structure' as const, confidence: 'A' as const, barIndex: last }
+    const base = { tier: 3 as const, kind: 'structure' as const, confidence: 'A' as const, barIndex: at }
 
-  if (hh && hl) {
-    return [{ ...base, id: 'trend_up_structure', side: 'bullish', strength: 2,
-      evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 상승, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 상승 (HH/HL)` }]
+    if (hh && hl) {
+      out.push({ ...base, id: 'trend_up_structure', side: 'bullish', strength: 2,
+        evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 상승, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 상승 (HH/HL)` })
+    } else if (lh && ll) {
+      out.push({ ...base, id: 'trend_down_structure', side: 'bearish', strength: 2,
+        evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 하락, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 하락 (LH/LL)` })
+    } else {
+      out.push({ ...base, id: 'trend_range', side: 'neutral', strength: 1,
+        evidence: '고점·저점이 한 방향으로 정렬되지 않음 (횡보)' })
+    }
   }
-  if (lh && ll) {
-    return [{ ...base, id: 'trend_down_structure', side: 'bearish', strength: 2,
-      evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 하락, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 하락 (LH/LL)` }]
-  }
-  return [{ ...base, id: 'trend_range', side: 'neutral', strength: 1,
-    evidence: '고점·저점이 한 방향으로 정렬되지 않음 (횡보)' }]
+  return out
 }
 
 /**

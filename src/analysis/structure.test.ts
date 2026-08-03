@@ -57,6 +57,22 @@ describe('detectTrend', () => {
   it('look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectTrend, synthCandles(220))
   })
+
+  // ── F2 회귀: 마지막 피벗에서만 신호를 내면 detectAll(cs).filter(s => s.barIndex <= D)
+  // 형태(스펙 5.2(1)/9(1)의 미래참조 불변식)가 추세 신호를 통째로 놓친다. 리뷰어가
+  // D = 120/180/240/300/360 다섯 지점에서 실측했다 — 여기서 동일하게 재현한다.
+  describe('회귀: 모든 피벗 확정 시점마다 신호를 내야 한다 (F2)', () => {
+    const cs = synthCandles(400)
+    for (const D of [120, 180, 240, 300, 360]) {
+      it(`D=${D}: 절단 필터에 추세 신호가 남아 있고 절단 실행의 마지막 신호와 id가 같다`, () => {
+        const truncated = detectTrend(cs.slice(0, D + 1))
+        const full = detectTrend(cs).filter((s) => s.barIndex <= D)
+        expect(full.length).toBeGreaterThan(0)
+        expect(truncated.length).toBeGreaterThan(0)
+        expect(full[full.length - 1].id).toBe(truncated[truncated.length - 1].id)
+      })
+    }
+  })
 })
 
 describe('srLevels', () => {
