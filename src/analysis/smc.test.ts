@@ -71,3 +71,112 @@ describe('detectMSB', () => {
     assertNoLookAhead(detectMSB, synthCandles(220))
   })
 })
+
+// ── Task 13 Group B: 하락 분기 보강 ──
+// 규칙표(task-7-brief.md, task-8-brief.md)에서 직접 유도. 상승 대응 테스트를 거울로 뒤집는다.
+
+describe('detectFVG — 하락 갭 (fvg_bear)', () => {
+  it('하락 갭을 잡고 갭 구간을 refs에 담는다 (priceLow < priceHigh 확인 포함)', () => {
+    // high[2]=14 < low[0]=18 → 하락 FVG, 갭 구간 [high[2]=14, low[0]=18]
+    const cs = [mk(20, 21, 18, 19, 100, 0), mk(19, 19, 12, 13, 100, 1), mk(13, 14, 10, 11, 100, 2), mk(11, 12, 9, 10, 100, 3)]
+    const sigs = detectFVG(cs)
+    const bear = sigs.find((s) => s.id === 'fvg_bear')
+    expect(bear).toBeDefined()
+    expect(bear!.barIndex).toBe(2)
+    expect(bear!.refs).toMatchObject({ priceLow: 14, priceHigh: 18 })
+    // 규칙표: 갭 구간은 [high[i], low[i-2]] — 뒤집히지 않아야 한다
+    expect(bear!.refs!.priceLow!).toBeLessThan(bear!.refs!.priceHigh!)
+  })
+
+  it('이후 가격이 하락 갭을 메우면 신호를 내지 않는다', () => {
+    const cs = [mk(20, 21, 18, 19, 100, 0), mk(19, 19, 12, 13, 100, 1), mk(13, 14, 10, 11, 100, 2), mk(14, 17, 13, 15, 100, 3)]
+    expect(detectFVG(cs).some((s) => s.id === 'fvg_bear')).toBe(false)
+  })
+})
+
+describe('detectOrderBlocks — 하락 오더블록 (ob_bear_resistance)', () => {
+  it('하락 임펄스 직전 양봉을 약세 오더블록으로 잡는다 (임펄스 = high[i] - close[j] >= 1.5*ATR)', () => {
+    const flat = Array.from({ length: 20 }, (_, i) => mk(100, 101, 99, 100, 100, i))
+    const cs = [
+      ...flat,
+      mk(100, 101.5, 100, 101.5, 100, 20), // 20: 양봉 = OB 후보 (ATR[20] ≈ 1.9643)
+      mk(101.5, 102, 94, 95, 300, 21),     // 21: 임펄스 6.5 >= 1.5*1.9643 ≈ 2.946 → 발화
+      mk(95, 96, 93, 94, 200, 22),
+    ]
+    const sigs = detectOrderBlocks(cs)
+    const ob = sigs.find((s) => s.id === 'ob_bear_resistance')
+    expect(ob).toBeDefined()
+    expect(ob!.barIndex).toBe(21)
+    expect(ob!.refs?.pivotBar).toBe(20)
+  })
+
+  it('임펄스가 1.5*ATR 를 아슬아슬하게 못 채우면 발화하지 않는다', () => {
+    const flat = Array.from({ length: 20 }, (_, i) => mk(100, 101, 99, 100, 100, i))
+    const cs = [
+      ...flat,
+      mk(100, 101.5, 100, 101.5, 100, 20), // 20: 동일 OB 후보, ATR[20] ≈ 1.9643, 임계값 ≈ 2.946
+      mk(101.5, 102, 97, 98.6, 300, 21),   // 21: 임펄스 = 101.5-98.6 = 2.9 < 2.946 → 미발화
+      mk(98.6, 101, 98, 100, 200, 22),     // 22: 종가 100 = low[20] → close<low 조건 자체가 거짓 (lookahead 윈도우 j=22도 미발화 확인)
+    ]
+    const sigs = detectOrderBlocks(cs)
+    expect(sigs.some((s) => s.id === 'ob_bear_resistance')).toBe(false)
+  })
+})
+
+describe('detectLiquiditySweep — 고점 스윕 (liq_sweep_high)', () => {
+  it('스윙하이를 고가로 뚫고 종가는 아래로 복귀하면 고점 스윕이다', () => {
+    const cs = [
+      mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
+      mk(100, 106, 99, 100, 100, 2),  // 2: 스윙하이 106
+      mk(100, 104, 99, 100, 100, 3), mk(100, 102, 99, 101, 100, 4),
+      mk(101, 102, 99, 100, 100, 5), mk(100, 101, 99, 100, 100, 6),
+      mk(100, 110, 99, 101, 300, 7),  // 7: 106을 고가로 뚫고 종가는 아래로 복귀
+    ]
+    const sigs = detectLiquiditySweep(cs)
+    const s = sigs.find((x) => x.id === 'liq_sweep_high')
+    expect(s).toBeDefined()
+    expect(s!.barIndex).toBe(7)
+    expect(s!.refs?.price).toBe(106)
+  })
+
+  it('고가가 스윙하이에 닿기만 하고 넘지 못하면 발화하지 않는다', () => {
+    const cs = [
+      mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
+      mk(100, 106, 99, 100, 100, 2),  // 2: 스윙하이 106
+      mk(100, 104, 99, 100, 100, 3), mk(100, 102, 99, 101, 100, 4),
+      mk(101, 102, 99, 100, 100, 5), mk(100, 101, 99, 100, 100, 6),
+      mk(100, 106, 99, 101, 300, 7),  // 7: 고가가 106과 정확히 같음 (초과 아님)
+    ]
+    const sigs = detectLiquiditySweep(cs)
+    expect(sigs.some((x) => x.id === 'liq_sweep_high')).toBe(false)
+  })
+})
+
+describe('detectMSB — 하락 구조 붕괴 (msb_bear)', () => {
+  it('종가가 확정된 직전 스윙로우를 하향 돌파하면 msb_bear를 낸다', () => {
+    const cs = [
+      mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
+      mk(100, 101, 95, 96, 100, 2),   // 2: 스윙로우 95
+      mk(96, 101, 99, 100, 100, 3), mk(100, 102, 99, 101, 100, 4),
+      mk(101, 102, 99, 100, 100, 5), mk(100, 101, 99, 100, 100, 6),
+      mk(100, 101, 90, 91, 300, 7),   // 7: 종가 91 < 95 → 구조 붕괴
+    ]
+    const sigs = detectMSB(cs)
+    const s = sigs.find((x) => x.id === 'msb_bear')
+    expect(s).toBeDefined()
+    expect(s!.barIndex).toBe(7)
+    expect(s!.refs?.price).toBe(95)
+  })
+
+  it('종가가 스윙로우와 같을 뿐 하회하지 않으면 발화하지 않는다', () => {
+    const cs = [
+      mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
+      mk(100, 101, 95, 96, 100, 2),   // 2: 스윙로우 95
+      mk(96, 101, 99, 100, 100, 3), mk(100, 102, 99, 101, 100, 4),
+      mk(101, 102, 99, 100, 100, 5), mk(100, 101, 99, 100, 100, 6),
+      mk(96, 97, 94, 95, 300, 7),     // 7: 종가 95 == 스윙로우 95 (하회 아님)
+    ]
+    const sigs = detectMSB(cs)
+    expect(sigs.some((x) => x.id === 'msb_bear')).toBe(false)
+  })
+})
