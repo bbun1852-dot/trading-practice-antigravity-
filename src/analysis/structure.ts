@@ -61,19 +61,38 @@ export function detectTrend(cs: Candle[]): Signal[] {
     evidence: '고점·저점이 한 방향으로 정렬되지 않음 (횡보)' }]
 }
 
-/** 피벗 가격을 tolerance 내로 묶어 수평 지지·저항 레벨을 만든다 */
+/**
+ * 피벗 가격을 tolerance 내로 묶어 수평 지지·저항 레벨을 만든다.
+ *
+ * 클러스터 중심을 러닝 민(running mean)으로만 갱신하고 새 피벗을 "그 순간의(이미
+ * 이동한) 중심"과만 비교하면, 매 터치가 중심에서 tolerancePct 이내여도 중심 자체가
+ * 계속 같은 방향으로 흘러 클러스터 전체 폭이 tolerancePct를 몇 배나 넘어설 수 있다
+ * (연쇄적 드리프트). 그래서 여기서는 각 클러스터의 lo/hi 워터마크를 내부적으로
+ * 추적하고, 새 피벗을 합류시켰을 때 만들어질 "전체 폭"이 tolerancePct 이내일 때만
+ * 합류를 허용한다 — 순간 중심이 아니라 클러스터의 실제 최소/최대 경계 기준.
+ */
 export function srLevels(cs: Candle[], tolerancePct = 0.005) {
   const pivots = findPivots(cs, 2)
-  const clusters: { price: number; touches: number; lastBar: number }[] = []
+  type Cluster = { lo: number; hi: number; sum: number; touches: number; lastBar: number }
+  const clusters: Cluster[] = []
   for (const p of pivots) {
-    const hit = clusters.find((c) => Math.abs(c.price - p.price) / c.price <= tolerancePct)
+    const hit = clusters.find((c) => {
+      const lo = Math.min(c.lo, p.price)
+      const hi = Math.max(c.hi, p.price)
+      return (hi - lo) / lo <= tolerancePct
+    })
     if (hit) {
-      hit.price = (hit.price * hit.touches + p.price) / (hit.touches + 1)
+      hit.lo = Math.min(hit.lo, p.price)
+      hit.hi = Math.max(hit.hi, p.price)
+      hit.sum += p.price
       hit.touches += 1
       hit.lastBar = Math.max(hit.lastBar, p.barIndex)
     } else {
-      clusters.push({ price: p.price, touches: 1, lastBar: p.barIndex })
+      clusters.push({ lo: p.price, hi: p.price, sum: p.price, touches: 1, lastBar: p.barIndex })
     }
   }
-  return clusters.filter((c) => c.touches >= 2).sort((a, b) => b.touches - a.touches)
+  return clusters
+    .filter((c) => c.touches >= 2)
+    .map((c) => ({ price: c.sum / c.touches, touches: c.touches, lastBar: c.lastBar }))
+    .sort((a, b) => b.touches - a.touches)
 }

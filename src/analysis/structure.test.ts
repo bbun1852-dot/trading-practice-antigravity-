@@ -85,4 +85,68 @@ describe('srLevels', () => {
     ]
     expect(srLevels(cs).every((l) => l.touches >= 2)).toBe(true)
   })
+
+  it('클러스터 전체 폭이 tolerancePct를 넘지 않는다 (러닝 민 드리프트 회귀)', () => {
+    // 리뷰어가 지적한 시나리오: 매 터치를 '현재(이미 이동한) 클러스터 중심'의 허용오차
+    // 경계에 딱 걸치도록 그리디하게 배치하면, 러닝 민(running mean) 기반 클러스터링은
+    // 10번째 터치까지 첫 터치 대비 계속 걸어나간다 — tolerancePct(0.5%)의 약 3배인 1.4%.
+    const tol = 0.005
+    const peaks: number[] = [100]
+    {
+      let center = 100
+      for (let k = 1; k < 10; k++) {
+        const next = center * (1 + tol) * 0.999999 // (구)버그 판정 경계 바로 안쪽
+        peaks.push(next)
+        center = (center * k + next) / (k + 1) // (구)버그의 러닝 민 갱신과 동일
+      }
+    }
+
+    // 각 목표 고점을 이미 검증된 사이클 모양(랠리 후 되돌림)으로 감싼다. n=2 확정
+    // 창이 사이클(6봉) 밖으로 나가지 않으므로 사이클마다 정확히 확정 고점 피벗
+    // 하나만 생기고, 그 값은 peaks[k]와 정확히 같다.
+    const cs = []
+    for (const P of peaks) {
+      const delta = P - 120
+      cs.push(mk(100 + delta, 105 + delta, 99 + delta, 104 + delta, 100, cs.length))
+      cs.push(mk(104 + delta, 110 + delta, 103 + delta, 109 + delta, 100, cs.length))
+      cs.push(mk(109 + delta, 120 + delta, 108 + delta, 119 + delta, 100, cs.length)) // 고점 = P
+      cs.push(mk(119 + delta, 119.5 + delta, 108 + delta, 109 + delta, 100, cs.length))
+      cs.push(mk(109 + delta, 110 + delta, 100 + delta, 101 + delta, 100, cs.length))
+      cs.push(mk(101 + delta, 102 + delta, 99 + delta, 100 + delta, 100, cs.length))
+    }
+
+    const levels = srLevels(cs, tol)
+
+    // 반환 타입에는 lo/hi가 없다(내부 부기일 뿐). 대신 우리가 직접 만든 정답
+    // (peaks, 오름차순 단조증가)에서 연속 구간을 재구성해 실제 폭을 검증한다 —
+    // 가격이 단조증가이고 확정 순서(barIndex)도 동일한 순서이므로, 한 번 닫힌
+    // 클러스터에는 이후 더 큰 값이 다시 합류할 수 없어 각 레벨은 peaks의 연속
+    // 구간 하나에 정확히 대응한다.
+    function findMatchingWindow(values: number[], level: { price: number; touches: number }) {
+      for (let start = 0; start + level.touches <= values.length; start++) {
+        const w = values.slice(start, start + level.touches)
+        const mean = w.reduce((a, b) => a + b, 0) / w.length
+        if (Math.abs(mean - level.price) < 1e-6) return w
+      }
+      return null
+    }
+
+    const nearZone = levels.filter((l) => Math.abs(l.price - peaks[0]) < 10)
+    expect(nearZone.length).toBeGreaterThan(0)
+
+    let accountedTouches = 0
+    for (const level of nearZone) {
+      const w = findMatchingWindow(peaks, level)
+      expect(w).not.toBeNull()
+      const span = (w![w!.length - 1] - w![0]) / w![0]
+      expect(span).toBeLessThanOrEqual(tol + 1e-9)
+      accountedTouches += level.touches
+    }
+    // 10개 터치 전부가 (경계 없는 단일 거대 클러스터가 아니라) 폭이 tolerancePct로
+    // 제한된 여러 레벨로 빠짐없이 나뉘어 들어갔는지 확인한다.
+    expect(accountedTouches).toBe(peaks.length)
+    // 버그가 있던 러닝 민 방식이 만들어내던, 첫 터치 대비 폭이 tolerancePct의 거의
+    // 3배(약 1.4%)까지 걸어나간 단일 10터치 클러스터는 더는 없어야 한다.
+    expect(nearZone.some((l) => l.touches === peaks.length)).toBe(false)
+  })
 })
