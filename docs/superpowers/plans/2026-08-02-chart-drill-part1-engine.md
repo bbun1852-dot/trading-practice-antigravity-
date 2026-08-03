@@ -676,7 +676,7 @@ git commit -m "feat(analysis): 지표 계산 (SMA/EMA/RSI/MACD/BB/ATR/OBV)"
   - `type Signal` (아래 정의)
   - `type Detector = (candles: Candle[]) => Signal[]`
   - `TIER_WEIGHT: Record<Tier, number>`
-  - `assertNoLookAhead(detect: Detector, candles: Candle[], sampleEvery?: number): void`
+  - `assertNoLookAhead(detect: Detector, candles: Candle[]): void`
   - `synthCandles(n: number, seed?: number): Candle[]` — 결정론적 합성 캔들 (테스트용)
 
 - [ ] **Step 1: Signal 타입 정의**
@@ -813,7 +813,19 @@ Expected: FAIL — module not found
 
 - [ ] **Step 5: 하네스 구현**
 
-`src/analysis/testing.ts`:
+> ⚠️ **이 코드 블록은 구현 후 보강되어 폐기되었다.**
+> 적대적 리뷰가 치팅 감지기 16종으로 공격해 11종이 이 버전을 통과했다.
+> 실제 구현은 커밋 `d8203d3` 이며, 보강 내역은
+> `.superpowers/sdd/2026-08-02-chart-drill-part1-engine/task-5-fix-spec.md` 에 있다.
+> **권위 있는 소스는 `src/analysis/testing.ts` 의 현재 내용이다.**
+>
+> 주요 차이: `key()` 가 9개 필드 전부 커버(`tier`·`kind`·`confidence`·`refs` 포함) /
+> `Set` 대신 키별 개수 비교(중복 배출 탐지) / 신호 0개면 공허 통과 대신 throw /
+> `sampleEvery` 제거(전수 검사) / `barIndex` 의 NaN·소수 거부 /
+> 비교는 `actual >= expected` — 잘린 실행이 더 많은 신호를 내는 것은 정상(미충족 갭이
+> 나중에 메워져 전체 실행에서 사라지는 경우)이므로 등호로 조이면 Task 7~8이 깨진다.
+
+`src/analysis/testing.ts` (폐기된 초안):
 
 ```ts
 import type { Candle } from '../data/types'
@@ -1974,8 +1986,7 @@ describe('detectAll', () => {
   })
 
   it('통합 감지기 전체가 look-ahead를 위반하지 않는다', () => {
-    // 신호가 많으므로 5개마다 하나씩 표본 검증 (전수는 느리다)
-    assertNoLookAhead(detectAll, candles, 5)
+    assertNoLookAhead(detectAll, candles)
   })
 })
 
