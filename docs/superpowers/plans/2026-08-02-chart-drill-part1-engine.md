@@ -6,17 +6,23 @@
 
 **Architecture:** `analysis/`는 UI를 모르는 순수 함수 계층으로, `Candle[]`를 받아 `Signal[]`을 낸다. `quiz/`가 이를 소비해 출제(scanner)·채점(grader)·재생(replay)을 하고, `ui/`는 결과만 그린다. 모든 감지 함수는 미래 봉을 참조하지 않으며 이를 자동 테스트로 강제한다.
 
-**Tech Stack:** Vite · React · TypeScript · lightweight-charts v5 · zustand · idb · Tailwind · Vitest
+**Tech Stack (Part 1이 실제로 쓰는 것):** TypeScript · Vitest · idb
+React · Tailwind · lightweight-charts v5 · zustand 는 UI가 생기는 Part 2에서 설치한다.
+Part 1에는 UI가 없으므로 지금 넣으면 미사용 의존성이 된다.
 
 ## Global Constraints
 
 - **미래참조 금지:** 어떤 신호가 `barIndex = k` 에서 났다고 주장하면, `detect(cs.slice(0, k+1))` 에도 동일한 신호가 있어야 한다. 즉 **k까지의 데이터만으로 도출 가능해야 한다.** `assertNoLookAhead` 가 이를 강제한다.
 - **barIndex 규약:** `barIndex`는 신호가 **확정된 봉**의 인덱스다. 피벗처럼 확정에 이후 봉이 필요한 경우 `barIndex = 확정 봉`, 실제 피벗 위치는 `refs.pivotBar`에 넣는다.
-- **lightweight-charts는 v5 API:** `chart.addSeries(CandlestickSeries, opts, paneIndex)`. v4의 `addCandlestickSeries()`는 존재하지 않는다.
-- **시간 단위:** Binance는 ms epoch, lightweight-charts는 **초** 단위 UNIX 타임스탬프. 경계에서 `/1000` 한다.
-- **마스킹:** `ChartPane`은 `symbol`을 인자로 받지 않는다. `displayLabel: string`만 받는다.
+- **시간 단위:** Binance는 ms epoch, `Candle.time` 은 **초** 단위 UNIX 타임스탬프(lightweight-charts 규약). 경계에서 `/1000` 한다.
+- **순수 함수:** `src/analysis/` 의 모든 export 는 부수효과 없는 순수 함수다. 같은 입력이면 항상 같은 출력이어야 하며, 여기에 DOM·네트워크·전역 상태가 들어가면 안 된다. (Phase 2에서 Node로 재실행할 전제)
+- **지표 배열 규약:** 모든 지표 함수는 입력과 **같은 길이**의 배열을 반환하고, 계산 불가 구간은 `NaN` 이다.
 - **Tier 가중치:** `{1:5, 2:4, 3:3, 4:2}` — 노트의 34점 체계.
 - 스펙: `docs/superpowers/specs/2026-08-02-chart-drill-design.md`
+
+**Part 2 이후에만 적용되는 제약** (Part 1 구현자는 무시해도 된다):
+lightweight-charts는 v5 API — `chart.addSeries(CandlestickSeries, opts, paneIndex)`,
+v4의 `addCandlestickSeries()`는 없음. `ChartPane`은 `symbol`이 아니라 `displayLabel`만 받는다(마스킹).
 
 ## 이 계획의 범위
 
@@ -41,6 +47,9 @@ Part 2 태스크 목록은 이 문서 맨 끝에 있다.
 
 ## File Structure
 
+Part 1에서 만드는 파일은 아래가 전부다. `src/quiz/`, `src/store/`, `src/ui/` 는
+Part 2의 것이므로 이 계획에서는 **만들지 않는다.**
+
 | 파일 | 책임 |
 |---|---|
 | `src/data/types.ts` | `Candle`, `Timeframe` 타입 |
@@ -54,88 +63,91 @@ Part 2 태스크 목록은 이 문서 맨 끝에 있다.
 | `src/analysis/candlePatterns.ts` | 캔들패턴 16종 |
 | `src/analysis/divergence.ts` | RSI/MACD/OBV 다이버전스 |
 | `src/analysis/indicatorSignals.ts` | 지표 기반 태그 (RSI/MACD/MA/BB/OBV) |
-| `src/analysis/signals.ts` | `detectSignals()` — 전 감지기 통합 |
-| `src/quiz/taxonomy.ts` | 태그 정의 (id·라벨·tier·confidence) |
-| `src/quiz/scanner.ts` | 셋업 후보 스캔 |
-| `src/quiz/generator.ts` | 문제 생성 (유형 배분·난이도) |
-| `src/quiz/replay.ts` | 체결 시뮬레이션 |
-| `src/quiz/grader.ts` | 3축 채점 |
-| `src/store/session.ts` | 현재 문제 상태 (zustand) |
-| `src/store/history.ts` | IndexedDB 이력 |
-| `src/ui/ChartPane.tsx` | 차트 렌더 + 드래그 가격라인 |
-| `src/ui/TradePanel.tsx` | 방향·가격 입력 |
-| `src/ui/TagPanel.tsx` | 근거 태그 선택 |
-| `src/ui/ResultPanel.tsx` | 채점 결과 |
-| `src/App.tsx` | 조립 |
+| `src/analysis/fixtures.ts` | 테스트용 결정론적 합성 캔들 (`synthCandles`, `mk`) |
+| `src/analysis/signals.ts` | `detectAll()` / `detectSignals()` — 전 감지기 통합 |
 
 ---
 
 ### Task 1: 프로젝트 스캐폴딩
 
 **Files:**
-- Create: `package.json`, `vite.config.ts`, `tsconfig.json`, `tailwind.config.js`, `postcss.config.js`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`
+- Create: `package.json`, `tsconfig.json`, `vite.config.ts`
 - Test: `src/smoke.test.ts`
 
 **Interfaces:**
-- Produces: `npm test` (Vitest), `npm run dev` (Vite) 가 동작하는 프로젝트
+- Produces: `npm test` (Vitest) 가 동작하는 TypeScript 프로젝트
 
-- [ ] **Step 1: Vite 프로젝트 생성 및 의존성 설치**
+**주의 — `npm create vite` 를 쓰지 말 것.** 이 디렉토리에는 이미 `.git/`, `docs/`,
+`.gitignore` 가 있어서 스캐폴더가 "Directory is not empty, remove existing files?"
+대화형 프롬프트를 띄우고, 비대화형 환경에서는 여기서 멈춘다. 파일을 직접 만든다.
 
-```bash
-cd /c/Users/bbun1/chart-drill
-npm create vite@latest . -- --template react-ts
-npm install
-npm install lightweight-charts zustand idb
-npm install -D vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom tailwindcss postcss autoprefixer
+**Part 1에는 UI가 없다.** React·Tailwind·lightweight-charts·zustand 는 Part 2에서
+설치한다. 지금 넣으면 쓰이지 않는 의존성이 된다. Part 1이 실제로 쓰는 것은
+TypeScript · Vitest · idb 뿐이다.
+
+- [ ] **Step 1: package.json 작성**
+
+```json
+{
+  "name": "chart-drill",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  }
+}
 ```
 
-- [ ] **Step 2: Vitest 설정을 vite.config.ts에 추가**
+- [ ] **Step 2: 의존성 설치**
+
+```bash
+npm install idb
+npm install -D typescript vite vitest
+```
+
+- [ ] **Step 3: tsconfig.json 작성**
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src"]
+}
+```
+
+- [ ] **Step 4: vite.config.ts 작성**
+
+Part 1은 순수 함수와 테스트뿐이라 `node` 환경이면 충분하다.
+Part 2에서 React 컴포넌트 테스트를 추가할 때 `jsdom` 으로 바꾼다.
 
 ```ts
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [react()],
   test: {
-    environment: 'jsdom',
+    environment: 'node',
     globals: true,
   },
 })
 ```
 
-`package.json`의 `scripts`에 추가:
-
-```json
-"test": "vitest run",
-"test:watch": "vitest"
-```
-
-- [ ] **Step 3: Tailwind 설정**
-
-```bash
-npx tailwindcss init -p
-```
-
-`tailwind.config.js`:
-
-```js
-export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  theme: { extend: {} },
-  plugins: [],
-}
-```
-
-`src/index.css` 맨 위에:
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
-- [ ] **Step 4: 스모크 테스트 작성**
+- [ ] **Step 5: 스모크 테스트 작성**
 
 `src/smoke.test.ts`:
 
@@ -149,16 +161,21 @@ describe('toolchain', () => {
 })
 ```
 
-- [ ] **Step 5: 테스트 실행 확인**
+- [ ] **Step 6: 테스트와 타입체크 실행 확인**
 
 Run: `npm test`
 Expected: PASS — 1 test passed
 
-- [ ] **Step 6: 커밋**
+Run: `npm run typecheck`
+Expected: 오류 없이 종료 (exit 0)
+
+- [ ] **Step 7: 커밋**
+
+`node_modules/` 는 이미 `.gitignore` 에 있다. `package-lock.json` 은 커밋한다.
 
 ```bash
 git add -A
-git commit -m "chore: Vite + React + TS + Vitest + Tailwind 스캐폴딩"
+git commit -m "chore: TypeScript + Vitest 스캐폴딩"
 ```
 
 ---
