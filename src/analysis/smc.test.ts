@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { detectFVG, detectOrderBlocks } from './smc'
 import { assertNoLookAhead } from './testing'
 import { synthCandles, mk } from './fixtures'
+import { detectLiquiditySweep, detectMSB } from './smc'
 
 describe('detectFVG', () => {
   it('상승 갭을 잡고 갭 구간을 refs에 담는다', () => {
@@ -42,5 +43,31 @@ describe('detectOrderBlocks', () => {
 
   it('look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectOrderBlocks, synthCandles(220))
+  })
+})
+
+describe('detectLiquiditySweep', () => {
+  it('스윙로우를 꼬리로 깨고 종가는 위에서 마감하면 저점 스윕이다', () => {
+    const cs = [
+      mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
+      mk(100, 101, 95, 96, 100, 2),   // 2: 스윙로우 95
+      mk(96, 101, 97, 100, 100, 3), mk(100, 102, 99, 101, 100, 4),
+      mk(101, 102, 99, 100, 100, 5), mk(100, 101, 99, 100, 100, 6),
+      mk(100, 101, 93, 99, 300, 7),   // 7: 95를 꼬리로 깨고 종가 복귀
+    ]
+    const sigs = detectLiquiditySweep(cs)
+    const s = sigs.find((x) => x.id === 'liq_sweep_low')
+    expect(s).toBeDefined()
+    expect(s!.barIndex).toBe(7)
+  })
+
+  it('look-ahead를 위반하지 않는다', () => {
+    assertNoLookAhead(detectLiquiditySweep, synthCandles(220))
+  })
+})
+
+describe('detectMSB', () => {
+  it('look-ahead를 위반하지 않는다', () => {
+    assertNoLookAhead(detectMSB, synthCandles(220))
   })
 })

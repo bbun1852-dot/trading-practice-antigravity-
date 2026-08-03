@@ -1,6 +1,7 @@
 import type { Candle } from '../data/types'
 import type { Signal } from './signalTypes'
 import { atr } from './indicators'
+import { findPivots, type Pivot } from './structure'
 
 /** 상승/하락 FVG 중 decisionIndex 시점에 아직 메워지지 않은 것만 낸다 */
 export function detectFVG(cs: Candle[]): Signal[] {
@@ -63,6 +64,75 @@ export function detectOrderBlocks(cs: Candle[]): Signal[] {
         })
         break
       }
+    }
+  }
+  return out
+}
+
+/** i 시점에 이미 확정된 피벗 중 가장 최근 것 */
+function lastConfirmedPivot(pivots: Pivot[], i: number, kind: 'high' | 'low'): Pivot | undefined {
+  let found: Pivot | undefined
+  for (const p of pivots) {
+    if (p.kind !== kind) continue
+    if (p.barIndex > i) break
+    found = p
+  }
+  return found
+}
+
+export function detectLiquiditySweep(cs: Candle[]): Signal[] {
+  const pivots = findPivots(cs, 2)
+  const out: Signal[] = []
+
+  for (let i = 0; i < cs.length; i++) {
+    const lo = lastConfirmedPivot(pivots, i, 'low')
+    if (lo && lo.pivotBar < i && cs[i].low < lo.price && cs[i].close > lo.price) {
+      out.push({
+        id: 'liq_sweep_low', tier: 1, kind: 'smc', side: 'bullish',
+        barIndex: i, confidence: 'A', strength: 3,
+        evidence: `스윙로우 ${lo.price.toFixed(2)} 를 저가 ${cs[i].low.toFixed(2)} 로 이탈 후 종가 ${cs[i].close.toFixed(2)} 로 복귀 (롱 손절 사냥)`,
+        refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
+      })
+    }
+    const hi = lastConfirmedPivot(pivots, i, 'high')
+    if (hi && hi.pivotBar < i && cs[i].high > hi.price && cs[i].close < hi.price) {
+      out.push({
+        id: 'liq_sweep_high', tier: 1, kind: 'smc', side: 'bearish',
+        barIndex: i, confidence: 'A', strength: 3,
+        evidence: `스윙하이 ${hi.price.toFixed(2)} 를 고가 ${cs[i].high.toFixed(2)} 로 이탈 후 종가 ${cs[i].close.toFixed(2)} 로 복귀 (숏 손절 사냥)`,
+        refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
+      })
+    }
+  }
+  return out
+}
+
+export function detectMSB(cs: Candle[]): Signal[] {
+  const pivots = findPivots(cs, 2)
+  const out: Signal[] = []
+  let lastBullBreak = -1
+  let lastBearBreak = -1
+
+  for (let i = 0; i < cs.length; i++) {
+    const hi = lastConfirmedPivot(pivots, i, 'high')
+    if (hi && hi.pivotBar < i && cs[i].close > hi.price && hi.pivotBar > lastBullBreak) {
+      lastBullBreak = hi.pivotBar
+      out.push({
+        id: 'msb_bull', tier: 1, kind: 'structure', side: 'bullish',
+        barIndex: i, confidence: 'A', strength: 3,
+        evidence: `종가 ${cs[i].close.toFixed(2)} 가 직전 스윙하이 ${hi.price.toFixed(2)} 상향 돌파 (구조 상승)`,
+        refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
+      })
+    }
+    const lo = lastConfirmedPivot(pivots, i, 'low')
+    if (lo && lo.pivotBar < i && cs[i].close < lo.price && lo.pivotBar > lastBearBreak) {
+      lastBearBreak = lo.pivotBar
+      out.push({
+        id: 'msb_bear', tier: 1, kind: 'structure', side: 'bearish',
+        barIndex: i, confidence: 'A', strength: 3,
+        evidence: `종가 ${cs[i].close.toFixed(2)} 가 직전 스윙로우 ${lo.price.toFixed(2)} 하향 붕괴 (구조 하락)`,
+        refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
+      })
     }
   }
   return out
