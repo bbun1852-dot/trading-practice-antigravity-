@@ -198,3 +198,71 @@ describe('detectDivergence — obv_divergence', () => {
     expect(detectDivergence(series(500)).some((x) => x.id === 'obv_divergence')).toBe(false)
   })
 })
+
+// ── F1: 약세 MACD/OBV 다이버전스 (specs 배열에 pivotKind:'high', side:'bearish' 추가) ──
+//
+// 아래 픽스처는 각각 기존 obv_divergence/macd_divergence 강세(저점) 픽스처를 고점으로
+// 뒤집은 거울상이다. detectDivergence()의 출력을 베끼지 않고 findPivots/obv/macd를 직접
+// 재계산해 피벗 위치와 방향을 먼저 확인했다 (실측치는 아래 주석 및 보고서에 기록).
+
+describe('detectDivergence — obv_divergence (약세, F1)', () => {
+  // 12봉 상승(거래량 500, OBV +5500까지) → 5봉 눌림(거래량 800) →
+  // 12봉 재상승(거래량 50, 첫 상승보다 훨씬 적은 거래량) → 가격은 337→360.4로 신고점을
+  // 갱신하지만 거래량이 적어 OBV는 5500→2100으로 오히려 낮아진다(매수 압력 약화).
+  // 격리 검증(재계산) 실측: pivotBar 11(price=337, obv=5500) → pivotBar 28
+  // (price=360.4, obv=2100). gap=17 (규칙 [5,60] 이내). barIndex = 28+2 = 30.
+  function series(volC: number): Candle[] {
+    const cs: Candle[] = []
+    let p = 300
+    for (let i = 0; i < 12; i++) { p += 3; cs.push(mk(p - 3, p + 1, p - 3.5, p, 500, i)) }
+    for (let i = 12; i < 17; i++) { p -= 3; cs.push(mk(p + 3, p + 3.5, p - 0.5, p, 800, i)) }
+    for (let i = 17; i < 29; i++) { p += 3.2; cs.push(mk(p - 3.2, p + 1, p - 3.7, p, volC, i)) }
+    for (let i = 29; i < 37; i++) { p -= 1; cs.push(mk(p + 1, p + 1.5, p - 0.5, p, 100, i)) }
+    return cs
+  }
+
+  it('가격 고점은 높아지고 OBV 고점은 낮아지면 side:bearish로 발생한다', () => {
+    const sigs = detectDivergence(series(50))
+    const s = sigs.find((x) => x.id === 'obv_divergence' && x.side === 'bearish')
+    expect(s).toBeDefined()
+    expect(s!.barIndex).toBe(30)
+  })
+
+  it('같은 픽스처에서 강세 변형(side:bullish)은 발생하지 않는다', () => {
+    const sigs = detectDivergence(series(50))
+    expect(sigs.some((x) => x.id === 'obv_divergence' && x.side === 'bullish')).toBe(false)
+  })
+})
+
+describe('detectDivergence — macd_divergence (약세, F1)', () => {
+  // 40봉 상승(직선, 기울기+3) → 10봉 눌림 → 10봉 재상승(기울기+2, 첫 상승의 +3보다
+  // 완만) → 가격은 420.6→425.5로 신고점을 갱신하지만 히스토그램은 0→-0.619로
+  // 오히려 낮아진다. 격리 검증(재계산) 실측: pivotBar 39(price=420.6, macdHist=0) →
+  // pivotBar 59(price=425.5, macdHist=-0.6192077813087664). gap=20. barIndex=61.
+  const positive = buildFromSegments(
+    [{ n: 40, step: 3 }, { n: 10, step: -1.5 }, { n: 10, step: 2 }, { n: 8, step: -1 }],
+    300, 0.3,
+  )
+  // 세 번째 구간 기울기를 +2 → +3(첫 상승과 동일 강도)으로 바꾸면 가격은 여전히
+  // 신고점(435.6)을 갱신하지만 histogram도 0→0.289로 같이 높아진다.
+  const negative = buildFromSegments(
+    [{ n: 40, step: 3 }, { n: 10, step: -1.5 }, { n: 10, step: 3 }, { n: 8, step: -1 }],
+    300, 0.3,
+  )
+
+  it('가격 고점은 높아지고 MACD 히스토그램 고점은 낮아지면 side:bearish로 발생한다', () => {
+    const sigs = detectDivergence(positive)
+    const s = sigs.find((x) => x.id === 'macd_divergence' && x.side === 'bearish')
+    expect(s).toBeDefined()
+    expect(s!.barIndex).toBe(61)
+  })
+
+  it('같은 픽스처에서 강세 변형(side:bullish)은 발생하지 않는다', () => {
+    const sigs = detectDivergence(positive)
+    expect(sigs.some((x) => x.id === 'macd_divergence' && x.side === 'bullish')).toBe(false)
+  })
+
+  it('두 번째 상승이 첫 상승과 같은 기울기면(모멘텀이 약해지지 않으면) 발생하지 않는다', () => {
+    expect(detectDivergence(negative).some((x) => x.id === 'macd_divergence' && x.side === 'bearish')).toBe(false)
+  })
+})

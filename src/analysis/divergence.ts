@@ -29,6 +29,10 @@ export function detectDivergence(cs: Candle[]): Signal[] {
     { id: 'rsi_hidden_div', kind: 'momentum', series: r, seriesName: 'RSI',  pivotKind: 'low',  priceUp: true,  indicatorUp: false, side: 'bullish' },
     { id: 'macd_divergence', kind: 'momentum', series: m, seriesName: 'MACD 히스토그램', pivotKind: 'low', priceUp: false, indicatorUp: true, side: 'bullish' },
     { id: 'obv_divergence',  kind: 'volume',   series: o, seriesName: 'OBV', pivotKind: 'low',  priceUp: false, indicatorUp: true,  side: 'bullish' },
+    { id: 'macd_divergence', kind: 'momentum', series: m, seriesName: 'MACD 히스토그램',
+      pivotKind: 'high', priceUp: true, indicatorUp: false, side: 'bearish' },
+    { id: 'obv_divergence',  kind: 'volume',   series: o, seriesName: 'OBV',
+      pivotKind: 'high', priceUp: true, indicatorUp: false, side: 'bearish' },
   ]
 
   const out: Signal[] = []
