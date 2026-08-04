@@ -31,6 +31,65 @@ export function detectFVG(cs: Candle[]): Signal[] {
   return out
 }
 
+/**
+ * 같은 barIndex(확정 봉) + 같은 id를 가지며 가격 구간 [priceLow, priceHigh]이
+ * 겹치는(경계 접촉 포함) 오더블록들을 하나로 병합한다. 전이적으로 처리한다 —
+ * A가 B와 겹치고 B가 C와 겹치면 셋이 한 덩어리다. 겹치지 않는 것은 그대로 남는다.
+ */
+function mergeOverlappingOrderBlocks(signals: Signal[]): Signal[] {
+  const groups = new Map<string, Signal[]>()
+  for (const s of signals) {
+    const key = `${s.barIndex}|${s.id}`
+    const arr = groups.get(key)
+    if (arr) arr.push(s)
+    else groups.set(key, [s])
+  }
+
+  const out: Signal[] = []
+  for (const group of groups.values()) {
+    if (group.length === 1) { out.push(group[0]); continue }
+
+    // priceLow 오름차순 정렬 후 러닝 하이로 겹침을 스윕하면 전이적 병합이 된다
+    // (고전적인 "겹치는 구간 병합" 알고리즘과 동일).
+    const sorted = [...group].sort((a, b) => a.refs!.priceLow! - b.refs!.priceLow!)
+    let cluster: Signal[] = [sorted[0]]
+    let runningHigh = sorted[0].refs!.priceHigh!
+
+    for (let i = 1; i < sorted.length; i++) {
+      const s = sorted[i]
+      const lo = s.refs!.priceLow!
+      if (lo <= runningHigh) {
+        cluster.push(s)
+        runningHigh = Math.max(runningHigh, s.refs!.priceHigh!)
+      } else {
+        out.push(mergeCluster(cluster))
+        cluster = [s]
+        runningHigh = s.refs!.priceHigh!
+      }
+    }
+    out.push(mergeCluster(cluster))
+  }
+  return out
+}
+
+function mergeCluster(cluster: Signal[]): Signal {
+  if (cluster.length === 1) return cluster[0]
+
+  const priceLow = Math.min(...cluster.map((s) => s.refs!.priceLow!))
+  const priceHigh = Math.max(...cluster.map((s) => s.refs!.priceHigh!))
+  const pivotBar = Math.min(...cluster.map((s) => s.refs!.pivotBar!))
+  const strength = Math.max(...cluster.map((s) => s.strength)) as 1 | 2 | 3
+  const first = cluster[0]
+  const label = first.side === 'bullish' ? '상승 지지' : '하락 저항'
+
+  return {
+    ...first,
+    strength,
+    evidence: `겹치는 오더블록 ${cluster.length}개 병합: ${label} 구간 ${priceLow.toFixed(2)}~${priceHigh.toFixed(2)}`,
+    refs: { priceLow, priceHigh, pivotBar, fromBar: pivotBar, toBar: first.barIndex },
+  }
+}
+
 /** 강한 임펄스 직전의 반대 캔들을 오더블록으로 본다 */
 export function detectOrderBlocks(cs: Candle[]): Signal[] {
   const out: Signal[] = []
@@ -66,7 +125,7 @@ export function detectOrderBlocks(cs: Candle[]): Signal[] {
       }
     }
   }
-  return out
+  return mergeOverlappingOrderBlocks(out)
 }
 
 /** i 시점에 이미 확정된 피벗 중 가장 최근 것 */

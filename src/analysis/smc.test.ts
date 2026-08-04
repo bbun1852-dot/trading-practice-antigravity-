@@ -3,6 +3,7 @@ import { detectFVG, detectOrderBlocks } from './smc'
 import { assertNoLookAhead } from './testing'
 import { synthCandles, mk } from './fixtures'
 import { detectLiquiditySweep, detectMSB } from './smc'
+import type { Candle } from '../data/types'
 
 describe('detectFVG', () => {
   it('상승 갭을 잡고 갭 구간을 refs에 담는다', () => {
@@ -43,6 +44,48 @@ describe('detectOrderBlocks', () => {
 
   it('look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectOrderBlocks, synthCandles(220))
+  })
+
+  // ── F3 회귀: 같은 확정 봉에서 겹치는 오더블록이 중복 계상되던 결함.
+  // 실측(리뷰어): 108봉에서 105/106/107 유래 ob_bull_support 3개가 각각
+  // 99.99–101.56 / 99.98–101.79 / 98.90–100.72 구간으로 동시 발화. 아래는 같은
+  // 형태를 최소 픽스처로 재현한다 — ATR/OHLC를 직접 재계산해 격리 검증했다(보고서 참고).
+  describe('회귀: 겹치는 오더블록은 하나로 병합된다 (F3)', () => {
+    function overlapFixture(): Candle[] {
+      const flat = Array.from({ length: 20 }, (_, i) => mk(100, 101, 99, 100, 100, i))
+      return [
+        ...flat,
+        mk(100, 100.5, 99.5, 99.7, 100, 20),   // i=20: 음봉, 구간 [99.5,100.5]
+        mk(99.7, 100.3, 99.3, 99.4, 100, 21),  // i=21: 음봉, 구간 [99.3,100.3] (20과 겹침)
+        mk(99.4, 100.1, 98.9, 99.0, 100, 22),  // i=22: 음봉, 구간 [98.9,100.1] (21과 겹침)
+        mk(99.0, 115, 99, 112, 300, 23),       // i=23: 셋 모두를 동시에 확정시키는 임펄스
+      ]
+    }
+
+    it('겹치는 OB 후보 3개가 있으면 신호 1개로 병합되고 구간은 합집합이다', () => {
+      const sigs = detectOrderBlocks(overlapFixture())
+      const obs = sigs.filter((s) => s.id === 'ob_bull_support' && s.barIndex === 23)
+      expect(obs.length).toBe(1)
+      expect(obs[0].refs?.priceLow).toBeCloseTo(98.9, 6)
+      expect(obs[0].refs?.priceHigh).toBeCloseTo(100.5, 6)
+    })
+
+    function nonOverlapFixture(): Candle[] {
+      const flat = Array.from({ length: 20 }, (_, i) => mk(100, 101, 99, 100, 100, i))
+      return [
+        ...flat,
+        mk(100, 100.5, 99.5, 99.7, 100, 20),   // i=20: 음봉, 구간 [99.5,100.5]
+        mk(90.5, 90.5, 89.5, 89.7, 100, 21),   // i=21: 음봉, 구간 [89.5,90.5] (20과 겹치지 않음)
+        mk(89.7, 90.3, 89.5, 90.0, 100, 22),   // i=22: 전환용 양봉 (bull OB 후보 아님)
+        mk(90.0, 132, 89, 130, 300, 23),       // i=23: 둘 다 동시에 확정시키는 임펄스
+      ]
+    }
+
+    it('같은 봉에서 확정돼도 겹치지 않는 OB 2개는 병합되지 않고 그대로 2개 남는다', () => {
+      const sigs = detectOrderBlocks(nonOverlapFixture())
+      const obs = sigs.filter((s) => s.id === 'ob_bull_support' && s.barIndex === 23)
+      expect(obs.length).toBe(2)
+    })
   })
 })
 
