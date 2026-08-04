@@ -465,13 +465,42 @@ Vite · React · TypeScript · lightweight-charts v5 · zustand · idb · Tailwi
 |---|---|---|
 | M1 | 데이터 + 차트 | Binance에서 400봉 받아 캐시하고 차트에 그린다. 마스킹 적용 |
 | M2 | 지표 + 구조 | `indicators.ts`, `structure.ts` 완성. look-ahead 테스트 통과 |
-| M3 | A등급 감지 | `smc.ts`, `candlePatterns.ts`, `divergence.ts` — A등급 태그 전량 |
+| M3 | A등급 감지 (1차) | `smc.ts`, `candlePatterns.ts`, `divergence.ts`, `indicatorSignals.ts` — 아래 40종 |
 | M4 | 출제 + 재생 + 기본 채점 | 문제를 풀고 채점받는 전체 루프가 처음으로 완성됨 |
 | M5 | B·C등급 감지 | `chartPatterns.ts`, `wyckoff.ts`. 감점 차등 적용 |
 | M6 | 34점 패널 + 룰 체크 | `ruleCheck.ts` + `RulePanel.tsx` |
 | M7 | 오답노트 + 대시보드 | `review.ts`, 반복 실수 카운트, 누적 성적, export |
 
 M4 시점에 이미 쓸 수 있는 툴이 된다. M5~M7은 그 위에 얹는다.
+
+### M3 범위 정정 (2026-08-02, Part 1 구현 후)
+
+원래 M3를 "A등급 태그 전량"으로 적었으나, Part 1 구현 결과 **40종**만 완성되었다.
+최종 리뷰가 이 불일치를 잡았다 — 계획의 파일표는 `choch`·`sr_flip`·`retest_*` 를
+`smc.ts` 에 배정해두었는데 실제로는 구현되지 않았다.
+
+**M3에서 완성된 것 (40종):**
+오더블록 2 · FVG 2 · 유동성 스윕 2 · MSB 2 · 추세 구조 3 ·
+캔들패턴 16 · 다이버전스 5(RSI 3 + MACD·OBV 각 강세·약세) ·
+RSI 3 · MACD 3 · 이동평균 6 · 볼린저 3 · 거래량 3
+
+**M4로 이관 (약 20종):**
+`choch` · `sr_flip` · `retest_success` · `retest_fail` · `liq_pool_untapped` ·
+`volume_node_high` · `volume_node_low` · `ob_double_engulfing` · `fvg_rebalance` ·
+`vol_divergence` · `vol_absorption` · `fib_retrace_382/5/618` · `fib_extension` ·
+`fib_confluence` · `bb_walking` · `rsi_failure_swing` · `macd_hist_turn` ·
+`ma_support` · `ma_resistance` · `obv_trend_confirm`
+
+**왜 M4로 미루는가:** 이 중 `sr_flip`·`retest_*` 는 `srLevels` 에 의존하는데,
+`srLevels` 는 현재 export만 되고 아무 감지기도 쓰지 않는다. 그리고 이 태그들은
+"이 레벨이 지금도 유효한가"라는 **신호 수명(lifetime)** 개념을 요구하는데,
+현재 `Signal` 에는 유효기간 필드가 없다. 최종 리뷰가 지적했듯
+`detectSignals(cs, 340)` 이 719개 신호를 내는데 최근 5봉에 속한 건 17개뿐이다.
+M4에서 태그 체계·스캐너·채점기를 함께 설계하면서 수명 규약을 정한 뒤 구현해야
+두 번 쓰지 않는다.
+
+**중요:** M4의 태그 체계(`taxonomy.ts`)에는 **감지기가 존재하는 태그만** 올린다.
+감지기 없는 태그를 사용자에게 체크 가능하게 노출하면 체크하는 족족 확정 ❌ 가 된다.
 
 ## 14. 미결 사항
 
