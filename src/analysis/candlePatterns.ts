@@ -57,11 +57,18 @@ export function detectCandlePatterns(cs: Candle[]): Signal[] {
       if (isBull(p) && !isBull(c) && c.open < p.close && c.close > p.open) {
         out.push(sig('candle_bear_harami', 'bearish', i, `직전 양봉이 현재 음봉을 품는 형태`, 1))
       }
-      if (Math.abs(c.low - p.low) <= 0.001 * c.low) {
-        out.push(sig('candle_tweezer', 'bullish', i, `저점 ${c.low.toFixed(2)} 이 직전 봉과 일치 (트위저 바텀)`, 1))
-      }
-      if (Math.abs(c.high - p.high) <= 0.001 * c.high) {
-        out.push(sig('candle_tweezer', 'bearish', i, `고점 ${c.high.toFixed(2)} 이 직전 봉과 일치 (트위저 탑)`, 1))
+      // 트위저: 두 봉의 색이 반대이고 저점(또는 고점)이 ATR 대비 사실상 일치.
+      // 허용오차를 가격 %가 아니라 ATR 상대로 두는 이유는, 같은 0.1%라도
+      // 자산·타임프레임에 따라 "일치"의 의미가 달라지기 때문이다.
+      const tol = 0.05 * (a[i] || 0)
+      const oppositeColor = isBull(c) !== isBull(p)
+      if (tol > 0 && oppositeColor) {
+        if (Math.abs(c.low - p.low) <= tol && isBull(c)) {
+          out.push(sig('tweezer_bottom', 'bullish', i, `저점 ${c.low.toFixed(2)} 이 직전 봉과 일치 (ATR 대비 ${(Math.abs(c.low - p.low) / a[i] * 100).toFixed(1)}%)`, 1))
+        }
+        if (Math.abs(c.high - p.high) <= tol && !isBull(c)) {
+          out.push(sig('tweezer_top', 'bearish', i, `고점 ${c.high.toFixed(2)} 이 직전 봉과 일치 (ATR 대비 ${(Math.abs(c.high - p.high) / a[i] * 100).toFixed(1)}%)`, 1))
+        }
       }
     }
 
