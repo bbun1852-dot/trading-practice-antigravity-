@@ -128,20 +128,29 @@ type LifetimeClass =
   | { kind: 'recent'; bars: number }                       // N봉 이내
   | { kind: 'zone'; maxBars: number
       invalidateOn: 'touch' | 'close_through' }            // 구간 미침범 + 상한
-  | { kind: 'state' }                                      // 같은 id 중 최신 1개
+  | { kind: 'state'; group: string }                       // 같은 그룹 중 최신 1개
 ```
+
+Task 4 리뷰에서 `state`가 감지기의 실제 발화 조건과 어긋난 태그들에 배정돼 있었음이
+드러났다 — 임계값을 처음 넘는 순간에만 쏘는 엣지 이벤트(`rsi_overbought`/`rsi_oversold`)와
+매봉 재평가되는 조건(`ma_aligned_*`/`bb_squeeze`)이 전부 "영구 존속 상태"로 취급됐고,
+상호배타적인 `trend_*` 3종은 서로 다른 id라서 셋이 동시에 답안지에 남을 수 있었다.
+`state`는 `group`을 갖도록 좁혔다 — 같은 그룹 안에서는 id가 달라도 최신 1개만 남는다.
 
 ### 3.2 클래스 배정 (49종)
 
 | 클래스 | 태그 | 수 |
 |---|---|---|
-| `state` | `trend_up_structure` `trend_down_structure` `trend_range` `ma_aligned_bull` `ma_aligned_bear` `bb_squeeze` `rsi_overbought` `rsi_oversold` | 8 |
+| `state('trend')` | `trend_up_structure` `trend_down_structure` `trend_range` | 3 |
 | `zone` | `ob_bull_support` `ob_bear_resistance` | 2 |
-| `recent` | `liq_sweep_low` `liq_sweep_high` `msb_bull` `msb_bear` `fvg_bull` `fvg_bear` `rsi_bull_div` `rsi_bear_div` `rsi_hidden_div` `macd_divergence` `obv_divergence` `vol_breakout_confirm` `vol_breakout_weak` `vol_climax` | 14 |
-| `bar` | 캔들패턴 17(트위저 분리 후) · `macd_golden` `macd_dead` `macd_zero_break` · `ma_golden_cross` `ma_dead_cross` · `bb_break_upper` `bb_break_lower` · `rsi_50_break` | 25 |
+| `recent` | `liq_sweep_low` `liq_sweep_high` `msb_bull` `msb_bear` `fvg_bull` `fvg_bear` `rsi_bull_div` `rsi_bear_div` `rsi_hidden_div` `rsi_overbought` `rsi_oversold` `macd_divergence` `obv_divergence` `vol_breakout_confirm` `vol_breakout_weak` `vol_climax` | 16 |
+| `bar` | 캔들패턴 17(트위저 분리 후) · `macd_golden` `macd_dead` `macd_zero_break` · `ma_golden_cross` `ma_dead_cross` `ma_aligned_bull` `ma_aligned_bear` · `bb_break_upper` `bb_break_lower` `bb_squeeze` · `rsi_50_break` | 28 |
 
-`state`에 실측 상위 신호가 몰려 있다 — `ma_aligned_*` 만으로 5,580회이며 최신 1개로 접힌다.
-감축 효과의 대부분이 여기서 나온다.
+`trend_up_structure`/`trend_down_structure`/`trend_range`는 한 변수의 상호배타적 세 값이라
+`group('trend')`로 묶어 최신 1개만 남긴다 — 서로 다른 id로 나뉜 탓에 셋이 동시에 살아남던
+문제를 exclusion group으로 바로잡았다. `ma_aligned_*`·`bb_squeeze`는 매봉마다 조건이
+재평가되므로 `bar`가 정확하고, `rsi_overbought`·`rsi_oversold`는 70/30선을 처음 넘는
+엣지에서만 발화하므로 `recent`로 만료시킨다.
 
 `recent.bars`는 태그마다 다를 수 있다. 유동성 스윕과 다이버전스는 유효 기간이 다르다.
 `calibrate.ts`가 태그별로 정한다.

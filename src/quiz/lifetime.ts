@@ -42,6 +42,8 @@ function isAlive(cs: Candle[], s: Signal, atIndex: number, lt: LifetimeClass): b
  */
 export function filterActive(cs: Candle[], signals: Signal[], atIndex: number): ActiveSignal[] {
   const out: ActiveSignal[] = []
+  // group 으로 키를 잡는다 — 같은 그룹이면 id가 달라도 최신 1개만 남긴다
+  // (trend_up/down/range 처럼 상호배타적 값이 서로 다른 id로 나뉜 경우를 위함).
   const latestState = new Map<string, Signal>()
 
   for (const s of signals) {
@@ -51,8 +53,9 @@ export function filterActive(cs: Candle[], signals: Signal[], atIndex: number): 
     if (!isAlive(cs, s, atIndex, def.lifetime)) continue
 
     if (def.lifetime.kind === 'state') {
-      const prev = latestState.get(s.id)
-      if (!prev || s.barIndex > prev.barIndex) latestState.set(s.id, s)
+      const group = def.lifetime.group
+      const prev = latestState.get(group)
+      if (!prev || s.barIndex > prev.barIndex) latestState.set(group, s)
       continue
     }
     out.push({ ...s, ageBars: atIndex - s.barIndex })

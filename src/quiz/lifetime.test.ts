@@ -26,12 +26,16 @@ describe('수명 클래스', () => {
     expect(filterActive(cs, s, 25)).toHaveLength(0)   // ageBars 5
   })
 
-  it('state: 같은 id 중 최신 1개만 남긴다', () => {
+  // ma_aligned_bull 은 리뷰 finding 2 에서 bar 로 재분류됐다 (매봉 재평가되는
+  // 조건이라 영구 상태가 아님). state 는 이제 trend_up/down/range 처럼 진짜
+  // 상호배타적 상태값에만 쓰인다 — 아래 테스트들은 trend_up_structure 로 옮겨서
+  // 기존에 검증하던 두 동작(최신 우선, 미래 배제)을 그대로 유지한다.
+  it('state: 같은 그룹 중 최신 1개만 남긴다', () => {
     const cs = flat(30)
     const s = [
-      sig('ma_aligned_bull', 10, { kind: 'ma' }),
-      sig('ma_aligned_bull', 15, { kind: 'ma' }),
-      sig('ma_aligned_bull', 18, { kind: 'ma' }),
+      sig('trend_up_structure', 10, { tier: 3, kind: 'structure' }),
+      sig('trend_up_structure', 15, { tier: 3, kind: 'structure' }),
+      sig('trend_up_structure', 18, { tier: 3, kind: 'structure' }),
     ]
     const out = filterActive(cs, s, 25)
     expect(out).toHaveLength(1)
@@ -40,10 +44,53 @@ describe('수명 클래스', () => {
 
   it('state: 관측 시점 이후의 것은 쓰지 않는다', () => {
     const cs = flat(30)
-    const s = [sig('ma_aligned_bull', 10, { kind: 'ma' }), sig('ma_aligned_bull', 22, { kind: 'ma' })]
+    const s = [
+      sig('trend_up_structure', 10, { tier: 3, kind: 'structure' }),
+      sig('trend_up_structure', 22, { tier: 3, kind: 'structure' }),
+    ]
     const out = filterActive(cs, s, 15)
     expect(out).toHaveLength(1)
     expect(out[0].barIndex).toBe(10)
+  })
+
+  it('state: 같은 그룹 안에서는 id 가 달라도 최신 1개로 수렴한다 (배타 그룹)', () => {
+    const cs = flat(30)
+    // trend_up/down/range 는 group('trend') 로 묶인 상호배타적 세 값이다.
+    // 예전엔 세 id 가 서로 달라서 전부 살아남았다 — 지금은 최신 1개만 남아야 한다.
+    const s = [
+      sig('trend_up_structure', 10, { tier: 3, kind: 'structure' }),
+      sig('trend_down_structure', 18, { tier: 3, kind: 'structure', side: 'bearish' }),
+    ]
+    const out = filterActive(cs, s, 25)
+    expect(out).toHaveLength(1)
+    expect(out[0].id).toBe('trend_down_structure')
+    expect(out[0].barIndex).toBe(18)
+  })
+
+  it('state: 배타 그룹 3종이 섞여도 결국 최신 1개만 남는다', () => {
+    const cs = flat(30)
+    const s = [
+      sig('trend_up_structure', 10, { tier: 3, kind: 'structure' }),
+      sig('trend_range', 20, { tier: 3, kind: 'structure', side: 'neutral' }),
+      sig('trend_down_structure', 24, { tier: 3, kind: 'structure', side: 'bearish' }),
+    ]
+    const out = filterActive(cs, s, 25)
+    expect(out).toHaveLength(1)
+    expect(out[0].id).toBe('trend_down_structure')
+  })
+
+  it('bar: 매봉 재평가 태그(ma_aligned_bull)는 그 봉에서만 유효하다', () => {
+    const cs = flat(30)
+    const s = [sig('ma_aligned_bull', 20, { tier: 4, kind: 'ma' })]
+    expect(filterActive(cs, s, 20)).toHaveLength(1)
+    expect(filterActive(cs, s, 21)).toHaveLength(0)   // 20봉에서만 유효 — 21봉엔 없다
+  })
+
+  it('recent: 엣지 이벤트 태그(rsi_overbought)는 recent 윈도우를 넘기면 사라진다', () => {
+    const cs = flat(30)
+    const s = [sig('rsi_overbought', 20, { tier: 4, kind: 'momentum', side: 'bearish' })]
+    expect(filterActive(cs, s, 24)).toHaveLength(1)   // ageBars 4 < 5
+    expect(filterActive(cs, s, 25)).toHaveLength(0)   // ageBars 5 — 70선을 넘던 순간은 지나갔다
   })
 
   it('zone close_through: 종가가 구간 아래로 마감하면 무효 (bullish)', () => {
