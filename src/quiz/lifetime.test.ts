@@ -46,7 +46,7 @@ describe('수명 클래스', () => {
     expect(out[0].barIndex).toBe(10)
   })
 
-  it('zone close_through: 종가가 구간 아래로 마감하면 무효', () => {
+  it('zone close_through: 종가가 구간 아래로 마감하면 무효 (bullish)', () => {
     const cs = flat(30)
     cs[24] = mk(100, 101, 88, 89, 100, 24)   // 종가 89 < priceLow 95
     const s = [sig('ob_bull_support', 20, {
@@ -54,6 +54,25 @@ describe('수명 클래스', () => {
     })]
     expect(filterActive(cs, s, 23)).toHaveLength(1)
     expect(filterActive(cs, s, 25)).toHaveLength(0)
+  })
+
+  it('zone close_through: 종가가 구간 위로 마감하면 무효 (bearish)', () => {
+    const cs = flat(30)
+    cs[24] = mk(100, 112, 99, 111, 100, 24)   // 종가 111 > priceHigh 105
+    const s = [sig('ob_bear_resistance', 20, {
+      side: 'bearish', tier: 1, kind: 'smc', refs: { priceLow: 95, priceHigh: 105 },
+    })]
+    expect(filterActive(cs, s, 23)).toHaveLength(1)   // 아직 안 깨짐
+    expect(filterActive(cs, s, 25)).toHaveLength(0)   // 깨짐
+  })
+
+  it('zone close_through: bearish 구간은 반대 방향(구간 아래)으로 마감해도 무효화되지 않는다', () => {
+    const cs = flat(30)
+    cs[24] = mk(100, 101, 88, 89, 100, 24)   // 종가 89 < priceLow 95 — bullish 무효화 조건이지 bearish 조건이 아니다
+    const s = [sig('ob_bear_resistance', 20, {
+      side: 'bearish', tier: 1, kind: 'smc', refs: { priceLow: 95, priceHigh: 105 },
+    })]
+    expect(filterActive(cs, s, 25)).toHaveLength(1)   // bearish 는 위로 뚫려야 깨진다
   })
 
   it('zone: maxBars 를 넘으면 무효', () => {
