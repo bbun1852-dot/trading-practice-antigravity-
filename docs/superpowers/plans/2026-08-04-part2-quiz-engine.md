@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 설계 스펙: `docs/superpowers/specs/2026-08-04-part2-quiz-engine-design.md`. 이 계획과 스펙이 어긋나면 스펙이 우선한다.
-- `src/analysis/` 의 감지기는 **Task 2 외에는 수정하지 않는다.** Part 1이 테스트 124개로 고정한 미래참조 보증을 깨지 않기 위해서다.
+- `src/analysis/` 의 감지기는 **Task 2와 Task 11 외에는 수정하지 않는다.** Part 1이 테스트 124개로 고정한 미래참조 보증을 깨지 않기 위해서다. Task 2는 감지기 출력을 바꾸는 유일한 태스크이고, Task 11은 동작을 바꾸지 않는 정리(중복 가드 제거·테스트 추가)만 한다.
 - **채점 경로에서 `detectAll(cs).filter(...)` 를 쓰지 않는다.** 스캐너 1단계에서만 허용한다. 이유는 스펙 2.5·6절.
 - 모든 `quiz/` 모듈은 순수 함수다. DOM·네트워크·전역 상태·`Date.now()` 금지. 네트워크는 `scripts/` 와 `data/` 에만 존재한다.
 - 각 태스크 종료 시 `npx vitest run` 전부 통과 + `npx tsc --noEmit` exit 0. 하나라도 실패하면 그 태스크는 미완료다.
