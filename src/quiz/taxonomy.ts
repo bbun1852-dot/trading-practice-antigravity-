@@ -17,6 +17,12 @@ export type TagDef = {
   lifetime: LifetimeClass
 }
 
+// recent(5) / zone(50, ...) 는 Task 5에서 scripts/calibrate.ts 로 실측 확정한 값이다.
+// BTC/ETH/SOL/XRP/LINK × 4h/1d × 8개 결정 시점(표본 80개)에서 activeSignalsAt 이 낸
+// 유효 근거 개수 분포: 최소 3 / p25 7 / 중앙값 9 / p75 10 / 최대 17 — 목표 중앙값
+// 8~15를 만족해 초안값을 그대로 확정했다(추가 조정 불필요). 태그 하나가 표본을
+// 지배하지도 않았다(최다인 ob_bull_support 도 표본 80개 중 159회 — zone 특성상
+// 여러 개가 동시에 살아있을 수 있어 표본 수보다 많이 셀 수 있다).
 const bar = (): LifetimeClass => ({ kind: 'bar' })
 const recent = (bars: number): LifetimeClass => ({ kind: 'recent', bars })
 const state = (group: string): LifetimeClass => ({ kind: 'state', group })
