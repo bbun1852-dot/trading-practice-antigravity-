@@ -19,11 +19,13 @@ describe('수명 클래스', () => {
     expect(filterActive(cs, s, 21)).toEqual([])
   })
 
-  it('recent: N봉 이내만 유효하다', () => {
-    const cs = flat(30)
+  // Task 5 실측으로 recent 가 두 단이 됐다: 구조·SMC 사건 14봉, 지표의 순간 사건 4봉.
+  // 아래 두 테스트는 각 단의 경계를 정확한 값으로 고정한다.
+  it('recent(구조계): 14봉 이내만 유효하다', () => {
+    const cs = flat(40)
     const s = [sig('liq_sweep_low', 20, { tier: 1, kind: 'smc' })]
-    expect(filterActive(cs, s, 24)).toHaveLength(1)   // ageBars 4 < 5
-    expect(filterActive(cs, s, 25)).toHaveLength(0)   // ageBars 5
+    expect(filterActive(cs, s, 33)).toHaveLength(1)   // ageBars 13 < 14
+    expect(filterActive(cs, s, 34)).toHaveLength(0)   // ageBars 14
   })
 
   // ma_aligned_bull 은 리뷰 finding 2 에서 bar 로 재분류됐다 (매봉 재평가되는
@@ -86,11 +88,11 @@ describe('수명 클래스', () => {
     expect(filterActive(cs, s, 21)).toHaveLength(0)   // 20봉에서만 유효 — 21봉엔 없다
   })
 
-  it('recent: 엣지 이벤트 태그(rsi_overbought)는 recent 윈도우를 넘기면 사라진다', () => {
+  it('recent(순간계): 엣지 이벤트 태그(rsi_overbought)는 4봉을 넘기면 사라진다', () => {
     const cs = flat(30)
     const s = [sig('rsi_overbought', 20, { tier: 4, kind: 'momentum', side: 'bearish' })]
-    expect(filterActive(cs, s, 24)).toHaveLength(1)   // ageBars 4 < 5
-    expect(filterActive(cs, s, 25)).toHaveLength(0)   // ageBars 5 — 70선을 넘던 순간은 지나갔다
+    expect(filterActive(cs, s, 23)).toHaveLength(1)   // ageBars 3 < 4
+    expect(filterActive(cs, s, 24)).toHaveLength(0)   // ageBars 4 — 70선을 넘던 순간은 지나갔다
   })
 
   it('zone close_through: 종가가 구간 아래로 마감하면 무효 (bullish)', () => {

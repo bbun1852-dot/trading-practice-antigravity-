@@ -17,12 +17,31 @@ export type TagDef = {
   lifetime: LifetimeClass
 }
 
-// recent(5) / zone(50, ...) 는 Task 5에서 scripts/calibrate.ts 로 실측 확정한 값이다.
-// BTC/ETH/SOL/XRP/LINK × 4h/1d × 8개 결정 시점(표본 80개)에서 activeSignalsAt 이 낸
-// 유효 근거 개수 분포: 최소 3 / p25 7 / 중앙값 9 / p75 10 / 최대 17 — 목표 중앙값
-// 8~15를 만족해 초안값을 그대로 확정했다(추가 조정 불필요). 태그 하나가 표본을
-// 지배하지도 않았다(최다인 ob_bull_support 도 표본 80개 중 159회 — zone 특성상
-// 여러 개가 동시에 살아있을 수 있어 표본 수보다 많이 셀 수 있다).
+// ── 수명 값: Task 5에서 scripts/calibrate.ts 로 실측 확정 ──────────────────────
+//
+// 측정: BTC/ETH/SOL/XRP/LINK × 4h/1d, 2026-08-01T00:00Z 까지 1000봉(창 고정),
+// 계열당 결정 시점 40개 = 표본 400개.
+//
+// recent 를 한 값으로 두지 않고 두 단으로 나눈다. 스펙 3.2가 태그별로 다른 값을
+// 허용하는 이유가 여기 있다 — "근거가 아직 살아있다" 의 뜻이 사건 종류마다 다르다.
+//
+//   구조·SMC 사건(스윕/MSB/FVG)은 차트에 자리(레벨)를 남긴다. 14봉 뒤에도
+//   "저기서 유동성을 털었다" 는 여전히 짚을 만한 근거다.
+//   지표의 순간 사건(RSI 70선 돌파, 다이버전스, 거래량 급증)은 그 순간의 사건이라
+//   4봉이 지나면 근거로 대기 민망하다.
+//
+// recent 를 전 태그 한 값으로 두면 목표 대역(8~15) 안에 드는 결정 시점이 최대
+// 79%였는데, 두 단으로 나누니 81.5%(400개 중 326개)가 됐다. 동시에 ob_* 두 태그의
+// 비중이 41% → 33.5% 로 내려갔다 — zone 값을 건드려서가 아니라 다른 근거가 늘어난
+// 결과다.
+//
+// 확정값에서의 실측(2026-08-06 측정): 계열별 중앙값 10.0~12.0 — 10개 계열 전부
+// 8~15 통과. 풀링 분포 최소 2 / p25 9 / 중앙 11 / p75 13 / 최대 22.
+// 49종 중 한 번도 유효하지 않은 태그는 0종이다.
+const RECENT_STRUCTURAL = 14
+const RECENT_MOMENTARY = 4
+const ZONE_MAX_BARS = 50
+
 const bar = (): LifetimeClass => ({ kind: 'bar' })
 const recent = (bars: number): LifetimeClass => ({ kind: 'recent', bars })
 const state = (group: string): LifetimeClass => ({ kind: 'state', group })
@@ -40,20 +59,20 @@ const t = (
  */
 export const TAGS: TagDef[] = [
   // ── Tier 1 ──
-  t('liq_sweep_low', '저점 유동성 스윕 (롱 손절 사냥)', 1, 'smc', recent(5)),
-  t('liq_sweep_high', '고점 유동성 스윕 (숏 손절 사냥)', 1, 'smc', recent(5)),
-  t('ob_bull_support', '강세 오더블록 지지', 1, 'smc', zone(50, 'close_through')),
-  t('ob_bear_resistance', '약세 오더블록 저항', 1, 'smc', zone(50, 'close_through')),
-  t('msb_bull', '시장구조 상향 돌파 (BOS/MSB)', 1, 'structure', recent(5)),
-  t('msb_bear', '시장구조 하향 붕괴', 1, 'structure', recent(5)),
+  t('liq_sweep_low', '저점 유동성 스윕 (롱 손절 사냥)', 1, 'smc', recent(RECENT_STRUCTURAL)),
+  t('liq_sweep_high', '고점 유동성 스윕 (숏 손절 사냥)', 1, 'smc', recent(RECENT_STRUCTURAL)),
+  t('ob_bull_support', '강세 오더블록 지지', 1, 'smc', zone(ZONE_MAX_BARS, 'close_through')),
+  t('ob_bear_resistance', '약세 오더블록 저항', 1, 'smc', zone(ZONE_MAX_BARS, 'close_through')),
+  t('msb_bull', '시장구조 상향 돌파 (BOS/MSB)', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  t('msb_bear', '시장구조 하향 붕괴', 1, 'structure', recent(RECENT_STRUCTURAL)),
 
   // ── Tier 2 ──
   // FVG는 detectFVG가 이미 미충족만 배출하므로 zone이 아니라 recent다 (스펙 2.3)
-  t('fvg_bull', '상승 FVG (미충족)', 2, 'smc', recent(5)),
-  t('fvg_bear', '하락 FVG (미충족)', 2, 'smc', recent(5)),
-  t('vol_breakout_confirm', '돌파 시 거래량 급증', 2, 'volume', recent(5)),
-  t('vol_breakout_weak', '거래량 없는 돌파 (트랩)', 2, 'volume', recent(5)),
-  t('vol_climax', '거래량 클라이맥스', 2, 'volume', recent(5)),
+  t('fvg_bull', '상승 FVG (미충족)', 2, 'smc', recent(RECENT_STRUCTURAL)),
+  t('fvg_bear', '하락 FVG (미충족)', 2, 'smc', recent(RECENT_STRUCTURAL)),
+  t('vol_breakout_confirm', '돌파 시 거래량 급증', 2, 'volume', recent(RECENT_MOMENTARY)),
+  t('vol_breakout_weak', '거래량 없는 돌파 (트랩)', 2, 'volume', recent(RECENT_MOMENTARY)),
+  t('vol_climax', '거래량 클라이맥스', 2, 'volume', recent(RECENT_MOMENTARY)),
 
   // ── Tier 3 ──
   // trend_up/down/range 는 한 변수의 상호배타적 세 값이므로 같은 group('trend')로
@@ -96,16 +115,16 @@ export const TAGS: TagDef[] = [
   t('macd_golden', 'MACD 골든크로스', 4, 'momentum', bar()),
   t('macd_dead', 'MACD 데드크로스', 4, 'momentum', bar()),
   t('macd_zero_break', 'MACD 0선 돌파', 4, 'momentum', bar()),
-  t('macd_divergence', 'MACD 다이버전스', 4, 'momentum', recent(5)),
+  t('macd_divergence', 'MACD 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
   // rsi_overbought/oversold 는 70/30 선을 "처음 넘는" 엣지에서만 발화한다
   // (indicatorSignals.ts:32-33) — 영구 상태가 아니라 만료되는 근거다.
-  t('rsi_overbought', 'RSI 과매수', 4, 'momentum', recent(5)),
-  t('rsi_oversold', 'RSI 과매도', 4, 'momentum', recent(5)),
+  t('rsi_overbought', 'RSI 과매수', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('rsi_oversold', 'RSI 과매도', 4, 'momentum', recent(RECENT_MOMENTARY)),
   t('rsi_50_break', 'RSI 50선 돌파', 4, 'momentum', bar()),
-  t('rsi_bull_div', 'RSI 강세 다이버전스', 4, 'momentum', recent(5)),
-  t('rsi_bear_div', 'RSI 약세 다이버전스', 4, 'momentum', recent(5)),
-  t('rsi_hidden_div', 'RSI 히든 다이버전스', 4, 'momentum', recent(5)),
-  t('obv_divergence', 'OBV 다이버전스', 4, 'volume', recent(5)),
+  t('rsi_bull_div', 'RSI 강세 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('rsi_bear_div', 'RSI 약세 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('rsi_hidden_div', 'RSI 히든 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('obv_divergence', 'OBV 다이버전스', 4, 'volume', recent(RECENT_MOMENTARY)),
 ]
 
 export const TAG_BY_ID = new Map(TAGS.map((d) => [d.id, d]))
