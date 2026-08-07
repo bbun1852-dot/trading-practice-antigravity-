@@ -10,6 +10,9 @@ const TF = '4h' as const
 const LIMIT = 10
 
 const P = cachePath(SYM, TF, LIMIT)
+/** 창을 고정한 항목 — endTime 이 키의 일부임을 확인하는 데 쓴다 */
+const END = 1750000000
+const P_END = cachePath(SYM, TF, LIMIT, END)
 
 const candles = () =>
   Array.from({ length: LIMIT }, (_, i) => mk(1 + i, 2 + i, 0.5 + i, 1.5 + i, 100, i))
@@ -21,8 +24,7 @@ function putRaw(text: string): void {
 }
 
 afterEach(() => {
-  rmSync(P, { force: true })
-  rmSync(`${P}.tmp`, { force: true })
+  for (const f of [P, `${P}.tmp`, P_END, `${P_END}.tmp`]) rmSync(f, { force: true })
 })
 
 describe('파일 캔들 캐시', () => {
@@ -57,53 +59,61 @@ describe('망가진 캐시는 예외가 아니라 미스가 된다', () => {
       raw: '"문자열"',
     },
     {
-      name: '포맷 버전이 다르다',
-      raw: JSON.stringify({ version: 999, symbol: SYM, tf: TF, limit: LIMIT, candles: candles() }),
+      name: '포맷 버전이 미래다',
+      raw: JSON.stringify({ version: 999, symbol: SYM, tf: TF, limit: LIMIT, endTime: null, candles: candles() }),
+    },
+    {
+      name: '포맷 버전이 과거다 (옛 코드가 쓴 v1 — endTime 개념이 없던 시절)',
+      raw: JSON.stringify({ version: 1, symbol: SYM, tf: TF, limit: LIMIT, candles: candles() }),
     },
     {
       name: '요청 파라미터가 다르다 (limit 불일치)',
-      raw: JSON.stringify({ version: 1, symbol: SYM, tf: TF, limit: 777, candles: candles() }),
+      raw: JSON.stringify({ version: 2, symbol: SYM, tf: TF, limit: 777, endTime: null, candles: candles() }),
     },
     {
       name: '요청 파라미터가 다르다 (symbol 불일치)',
-      raw: JSON.stringify({ version: 1, symbol: 'OTHER', tf: TF, limit: LIMIT, candles: candles() }),
+      raw: JSON.stringify({ version: 2, symbol: 'OTHER', tf: TF, limit: LIMIT, endTime: null, candles: candles() }),
+    },
+    {
+      name: '요청 파라미터가 다르다 (endTime 불일치 — 창이 다른 데이터다)',
+      raw: JSON.stringify({ version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: 1750000000, candles: candles() }),
     },
     {
       name: '캔들 배열이 비었다',
-      raw: JSON.stringify({ version: 1, symbol: SYM, tf: TF, limit: LIMIT, candles: [] }),
+      raw: JSON.stringify({ version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null, candles: [] }),
     },
     {
       name: '캔들에 필드가 빠졌다 (volume 없음)',
       raw: JSON.stringify({
-        version: 1, symbol: SYM, tf: TF, limit: LIMIT,
+        version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null,
         candles: [{ time: 1, open: 1, high: 2, low: 0, close: 1.5 }],
       }),
     },
     {
       name: '캔들 필드가 숫자가 아니다 (문자열)',
       raw: JSON.stringify({
-        version: 1, symbol: SYM, tf: TF, limit: LIMIT,
+        version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null,
         candles: [{ time: 1, open: '1', high: 2, low: 0, close: 1.5, volume: 100 }],
       }),
     },
     {
       name: '캔들 필드가 유한수가 아니다 (null → NaN 자리)',
       raw: JSON.stringify({
-        version: 1, symbol: SYM, tf: TF, limit: LIMIT,
+        version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null,
         candles: [{ time: 1, open: null, high: 2, low: 0, close: 1.5, volume: 100 }],
       }),
     },
     {
       name: 'time 이 증가하지 않는다 (중복)',
       raw: JSON.stringify({
-        version: 1, symbol: SYM, tf: TF, limit: LIMIT,
+        version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null,
         candles: [mk(1, 2, 0.5, 1.5, 100, 0), mk(1, 2, 0.5, 1.5, 100, 0)],
       }),
     },
     {
       name: 'time 이 증가하지 않는다 (역순)',
       raw: JSON.stringify({
-        version: 1, symbol: SYM, tf: TF, limit: LIMIT,
+        version: 2, symbol: SYM, tf: TF, limit: LIMIT, endTime: null,
         candles: [mk(1, 2, 0.5, 1.5, 100, 5), mk(1, 2, 0.5, 1.5, 100, 1)],
       }),
     },
@@ -125,7 +135,7 @@ describe('망가진 캐시는 예외가 아니라 미스가 된다', () => {
   })
 
   it('망가진 파일을 지운 자리에 다시 쓰면 정상 동작한다', () => {
-    putRaw(JSON.stringify({ version: 999, symbol: SYM, tf: TF, limit: LIMIT, candles: candles() }))
+    putRaw(JSON.stringify({ version: 999, symbol: SYM, tf: TF, limit: LIMIT, endTime: null, candles: candles() }))
     expect(readCache(SYM, TF, LIMIT)).toBeNull()
 
     const cs = candles()
@@ -138,6 +148,16 @@ describe('망가진 캐시는 예외가 아니라 미스가 된다', () => {
     // 다른 limit 은 다른 경로라 애초에 파일이 없다 — 파일 이름과 봉투 양쪽으로 막힌다.
     expect(readCache(SYM, TF, LIMIT + 1)).toBeNull()
     expect(readCache(SYM, TF, LIMIT)).not.toBeNull()
+  })
+
+  it('endTime 이 다르면 다른 항목이다 (창이 다르면 다른 데이터다)', () => {
+    const fixed = candles()
+    writeCache(SYM, TF, LIMIT, fixed, END)
+
+    // 창을 고정해 넣은 것은 창을 고정해서만 나온다
+    expect(readCache(SYM, TF, LIMIT, END)).toEqual(fixed)
+    // "최신" 요청은 이 항목을 쓰면 안 된다 — 같은 심볼·TF·limit 이라도 다른 봉들이다
+    expect(readCache(SYM, TF, LIMIT)).toBeNull()
   })
 
   it('쓰기는 임시 파일을 남기지 않는다', () => {

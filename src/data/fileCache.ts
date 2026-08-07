@@ -21,8 +21,10 @@ import { fetchKlines } from './binance'
 /**
  * 캐시 포맷 버전. Candle 의 모양이나 저장 방식이 바뀌면 반드시 올린다.
  * 파일 이름은 계약이 아니다 — 이름이 같아도 버전이 다르면 남이다.
+ *
+ * v2: endTime 을 요청 파라미터로 추가했다 (v1 파일은 버전 불일치로 폐기·재수신된다).
  */
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 const DIR = join(process.cwd(), '.candle-cache')
 
@@ -32,13 +34,18 @@ type CacheEnvelope = {
   symbol: string
   tf: Timeframe
   limit: number
+  /** 창의 끝(초). null 이면 "받은 시점의 최신" — 즉 매번 다른 데이터다. */
+  endTime: number | null
   candles: Candle[]
 }
 
-export function cachePath(symbol: string, tf: Timeframe, limit: number): string {
+export function cachePath(
+  symbol: string, tf: Timeframe, limit: number, endTime?: number,
+): string {
   // 심볼은 파일 이름의 일부가 되므로 경로 문자를 흘려보내지 않는다.
   const safe = symbol.replace(/[^A-Za-z0-9_]/g, '_')
-  return join(DIR, `${safe}-${tf}-${limit}.json`)
+  // endTime 이 키에 들어가야 파일 이름이 실제로 어떤 봉을 가리키는지 뜻이 생긴다.
+  return join(DIR, `${safe}-${tf}-${limit}-${endTime ?? 'latest'}.json`)
 }
 
 const NUM_FIELDS = ['time', 'open', 'high', 'low', 'close', 'volume'] as const
@@ -76,8 +83,10 @@ function discard(p: string, reason: string): void {
  * 캐시 항목을 읽는다. **절대 예외를 던지지 않는다.** 조금이라도 미심쩍으면 null 이고,
  * null 은 곧 "다시 받아라" 라는 뜻이다.
  */
-export function readCache(symbol: string, tf: Timeframe, limit: number): Candle[] | null {
-  const p = cachePath(symbol, tf, limit)
+export function readCache(
+  symbol: string, tf: Timeframe, limit: number, endTime?: number,
+): Candle[] | null {
+  const p = cachePath(symbol, tf, limit, endTime)
   if (!existsSync(p)) return null
 
   let raw: string
@@ -110,8 +119,15 @@ export function readCache(symbol: string, tf: Timeframe, limit: number): Candle[
   }
 
   // 이 파일이 "무엇에 대한" 캐시인지 항목 자신에게 물어본다. 파일 이름은 계약이 아니다.
-  if (env.symbol !== symbol || env.tf !== tf || env.limit !== limit) {
-    discard(p, `요청 파라미터 불일치 (파일 ${String(env.symbol)}/${String(env.tf)}/${String(env.limit)})`)
+  if (
+    env.symbol !== symbol || env.tf !== tf || env.limit !== limit ||
+    env.endTime !== (endTime ?? null)
+  ) {
+    discard(
+      p,
+      `요청 파라미터 불일치 (파일 ${String(env.symbol)}/${String(env.tf)}/` +
+      `${String(env.limit)}/${String(env.endTime)})`,
+    )
     return null
   }
 
@@ -123,10 +139,14 @@ export function readCache(symbol: string, tf: Timeframe, limit: number): Candle[
   return env.candles
 }
 
-export function writeCache(symbol: string, tf: Timeframe, limit: number, cs: Candle[]): void {
+export function writeCache(
+  symbol: string, tf: Timeframe, limit: number, cs: Candle[], endTime?: number,
+): void {
   mkdirSync(DIR, { recursive: true })
-  const p = cachePath(symbol, tf, limit)
-  const env: CacheEnvelope = { version: CACHE_VERSION, symbol, tf, limit, candles: cs }
+  const p = cachePath(symbol, tf, limit, endTime)
+  const env: CacheEnvelope = {
+    version: CACHE_VERSION, symbol, tf, limit, endTime: endTime ?? null, candles: cs,
+  }
 
   // 임시 파일에 쓰고 rename 으로 갈아끼운다 — 쓰다가 죽어도 잘린 파일이 관측되지 않는다.
   const tmp = `${p}.tmp`
@@ -136,12 +156,18 @@ export function writeCache(symbol: string, tf: Timeframe, limit: number, cs: Can
 
 /**
  * 캐시 우선, 없으면 fetch 후 저장. **호출부가 쓰는 유일한 함수다.**
+ *
+ * endTime(초)을 주면 그 시점까지의 창을 고정해 받는다. 생략하면 "지금까지의 최신
+ * 1000봉" 이 되는데, 그건 실행하는 날마다 다른 데이터라는 뜻이다 — 같은 인덱스가
+ * 다른 봉을 가리키게 되므로 재현 가능한 측정에는 반드시 endTime 을 고정해야 한다.
  */
-export async function getCandles(symbol: string, tf: Timeframe, limit = 1000): Promise<Candle[]> {
-  const hit = readCache(symbol, tf, limit)
+export async function getCandles(
+  symbol: string, tf: Timeframe, limit = 1000, endTime?: number,
+): Promise<Candle[]> {
+  const hit = readCache(symbol, tf, limit, endTime)
   if (hit) return hit
 
-  const cs = await fetchKlines(symbol, tf, { limit })
+  const cs = await fetchKlines(symbol, tf, { limit, endTime })
   // 캐시에 넣을 만큼 믿지 못하는 데이터는 계산에 쓸 만큼도 믿지 못한다.
   // 여긴 캐시 문제가 아니라 진짜 오류이므로 조용히 넘기지 않고 던진다.
   // (개수는 미리 담아 둔다 — 타입가드가 실패 분기에서 cs 를 never 로 좁힌다.)
