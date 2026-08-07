@@ -1,7 +1,12 @@
 import { getCandles } from '../src/data/fileCache'
 import { activeSignalsAt } from '../src/quiz/lifetime'
 import { TAGS, TAG_BY_ID, type LifetimeClass } from '../src/quiz/taxonomy'
-import type { Timeframe } from '../src/data/types'
+import {
+  scanForSetups, mergeCandidates, setupScore, difficultyOf, dominantSide,
+  WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW,
+} from '../src/quiz/scanner'
+import type { SetupCandidate } from '../src/quiz/types'
+import type { Candle, Timeframe } from '../src/data/types'
 
 /**
  * 위험 체크포인트 ①: 결정 시점 하나가 내놓는 "유효 근거" 개수가 사람이 실제로
@@ -12,6 +17,10 @@ import type { Timeframe } from '../src/data/types'
  * 계열별이 실질 판정이다 — 이 도구의 약속은 "당신이 띄운 차트에서 동작한다" 이지
  * "차트 열 개 평균에서 동작한다" 가 아니다. 한 계열이라도 벗어나면 게이트 실패이고
  * 이 스크립트는 0이 아닌 코드로 끝난다.
+ *
+ * 위험 체크포인트 ②(파일 후반): 스캐너가 문제로 만들 만한 결정 시점을 1000봉당 몇 개나
+ * 찾아내는지, 그리고 2단계 지름길이 전수 정확 스캔과 같은 답을 내는지를 실측한다.
+ * 판정 기준은 ① 과 같다 — 계열별이 실질 판정이다.
  */
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'LINKUSDT']
@@ -94,10 +103,13 @@ type Series = { label: string; counts: number[] }
 const series: Series[] = []
 const pooled: number[] = []
 const tagHits = new Map<string, number>()
+/** 체크포인트 ② 가 같은 캔들을 다시 쓴다 (같은 창이어야 두 판정이 같은 데이터 위에 선다) */
+const candlesOf = new Map<string, Candle[]>()
 
 for (const sym of SYMBOLS) {
   for (const tf of TFS) {
     const cs = await getCandles(sym, tf, 1000, END_TIME)
+    candlesOf.set(`${sym} ${tf}`, cs)
     const counts: number[] = []
     for (const at of AT) {
       const active = activeSignalsAt(cs, at)
@@ -157,7 +169,7 @@ console.log(`\n한 번도 유효하지 않은 태그 ${never.length}종: ${never
 
 // ── 판정 ────────────────────────────────────────────────────────────────────
 
-console.log(`\n=== 게이트 판정 ===`)
+console.log(`\n=== 체크포인트 ① 게이트 판정 ===`)
 console.log(`기준: 모든 계열의 중앙값이 ${MEDIAN_MIN}~${MEDIAN_MAX} 안에 들고, 풀링 중앙값도 그래야 한다.`)
 console.log(`계열 ${series.length - failed.length}/${series.length} 통과, 풀링 중앙값 ${fmt(pd.median)} ${pooledOk ? '통과' : '실패'}`)
 
@@ -172,5 +184,166 @@ if (gateOk) {
   console.log(`\n판정: FAIL — ${why}`)
   // 읽기만 되고 믿을 수는 없는 튜닝 도구가 되지 않도록 종료 코드로도 알린다.
   // process.exit 대신 exitCode 를 쓴다 — 버퍼에 남은 출력이 잘리지 않게.
+  process.exitCode = 1
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 위험 체크포인트 ②: 후보 밀도와 2단계 지름길의 무손실성
+// ════════════════════════════════════════════════════════════════════════════
+//
+// 두 가지를 같이 본다. 밀도만 봐서는 부족하다 — 밀도가 목표 안에 들어도 그게 지름길이
+// 후보를 흘려서 나온 숫자라면 계기판이 거짓말을 하는 것이다.
+//
+//   (1) 밀도: scanForSetups 가 1000봉에서 문제로 쓸 만한 결정 시점을 몇 개 찾는가.
+//   (2) 무손실: 2단계 스캔 결과가 "모든 봉에 정확 경로를 돌린" 전수 스캔과 같은가.
+//
+// 1단계 임계값(minScore − COARSE_SLACK)은 증명이 아니라 실측으로 고른 값이라, 실데이터
+// 에서 지름길이 실제로 같은 답을 내는지는 매번 다시 확인해야 한다.
+
+const DENSITY_MIN = 15
+const DENSITY_MAX = 40
+const PROBE_MINS = [110, 115, 120, 125, 130, 135, 140, 145, 150]
+
+/**
+ * 지름길 없이 모든 봉에 정확 경로(activeSignalsAt)를 돌린 봉별 점수표. 1000봉에 약 2초.
+ * 이 표가 (a) 임계값 스윕의 재료이자 (b) 2단계 스캐너를 채점할 기준 답안이다.
+ */
+function exactRows(cs: Candle[]): SetupCandidate[] {
+  const out: SetupCandidate[] = []
+  for (let i = WARMUP; i < cs.length; i++) {
+    const active = activeSignalsAt(cs, i)
+    out.push({
+      barIndex: i,
+      setupScore: setupScore(active),
+      difficulty: difficultyOf(active),
+      dominantSide: dominantSide(active),
+      activeCount: active.length,
+    })
+  }
+  return out
+}
+
+/** 전수 점수표에서 minScore 로 거르고 스캐너와 같은 병합을 적용한 기준 답안 */
+const reference = (rows: SetupCandidate[], min: number): SetupCandidate[] =>
+  mergeCandidates(rows.filter((r) => r.setupScore >= min), DEFAULT_MERGE_WINDOW)
+
+/** 1000봉 환산 밀도 — 계열마다 봉 수가 다를 수 있으므로 개수를 그대로 비교하지 않는다 */
+const per1000 = (n: number, bars: number) => (n * 1000) / bars
+
+type DensitySeries = {
+  label: string; bars: number; rows: SetupCandidate[]
+  /** 전수 스캔에는 있는데 2단계 스캔이 놓친 후보 수 */
+  lost: number
+  /** 2단계 스캔에는 있는데 전수 스캔에는 없는 후보 수 */
+  extra: number
+}
+
+console.log(`\n\n=== 후보 밀도 측정 (계열마다 전수 정확 스캔 1회) ===`)
+const dseries: DensitySeries[] = []
+for (const [label, cs] of candlesOf) {
+  const t = Date.now()
+  const rows = exactRows(cs)
+  const fast = scanForSetups(cs, { minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })
+  const ref = reference(rows, DEFAULT_MIN_SCORE)
+  // 후보는 필드 전부가 같아야 한다 — barIndex 만 맞고 점수·난이도가 다르면 그것도 불일치다.
+  const fastKeys = new Set(fast.map((c) => JSON.stringify(c)))
+  const refKeys = new Set(ref.map((c) => JSON.stringify(c)))
+  const lost = [...refKeys].filter((k) => !fastKeys.has(k)).length
+  const extra = [...fastKeys].filter((k) => !refKeys.has(k)).length
+  dseries.push({ label, bars: cs.length, rows, lost, extra })
+  console.log(`  ${label.padEnd(14)} 전수 ${String(Date.now() - t).padStart(5)}ms  후보 ${String(fast.length).padStart(3)}개`)
+}
+
+// ── minScore 스윕 ───────────────────────────────────────────────────────────
+
+const shortLabel = (s: string) => s.replace('USDT', '')
+
+console.log(`\n=== minScore 스윕 (1000봉 환산 밀도, mergeWindow ${DEFAULT_MERGE_WINDOW}) ===`)
+console.log(
+  'min'.padStart(5) + dseries.map((s) => shortLabel(s.label).padStart(9)).join('') +
+  '평균'.padStart(8) + '최소'.padStart(6) + '최대'.padStart(6) + '여유'.padStart(6) + '  판정',
+)
+for (const m of PROBE_MINS) {
+  const ds = dseries.map((s) => per1000(reference(s.rows, m).length, s.bars))
+  const avg = ds.reduce((a, b) => a + b, 0) / ds.length
+  const lo = Math.min(...ds)
+  const hi = Math.max(...ds)
+  // 게이트 양쪽 경계까지의 최소 여유. 이 값이 가장 큰 행이 가장 안전한 임계값이다.
+  const margin = Math.min(lo - DENSITY_MIN, DENSITY_MAX - hi)
+  const mark = m === DEFAULT_MIN_SCORE ? ' ←기본값' : ''
+  console.log(
+    String(m).padStart(5) + ds.map((d) => fmt(d).padStart(9)).join('') +
+    avg.toFixed(1).padStart(8) + fmt(lo).padStart(6) + fmt(hi).padStart(6) + fmt(margin).padStart(6) +
+    `  ${lo >= DENSITY_MIN && hi <= DENSITY_MAX ? 'PASS' : 'FAIL'}${mark}`,
+  )
+}
+
+// ── 기본 임계값에서의 계열별 판정 ────────────────────────────────────────────
+
+console.log(`\n=== 기본값 minScore ${DEFAULT_MIN_SCORE} · mergeWindow ${DEFAULT_MERGE_WINDOW} 에서의 계열별 판정 ===`)
+console.log(
+  `${'계열'.padEnd(14)}${'후보'.padStart(6)}${'밀도'.padStart(7)}${'점수중앙'.padStart(10)}` +
+  `${'easy'.padStart(6)}${'med'.padStart(5)}${'hard'.padStart(6)}${'지름길'.padStart(10)}   판정`,
+)
+
+const densityFailed: string[] = []
+const shortcutFailed: string[] = []
+let totalCandidates = 0
+let totalBars = 0
+
+for (const s of dseries) {
+  const cand = reference(s.rows, DEFAULT_MIN_SCORE)
+  const density = per1000(cand.length, s.bars)
+  totalCandidates += cand.length
+  totalBars += s.bars
+
+  const sd = dist(cand.map((c) => c.setupScore))
+  const mix = (d: string) => cand.filter((c) => c.difficulty === d).length
+  const densityOk = density >= DENSITY_MIN && density <= DENSITY_MAX
+  const shortcutOk = s.lost === 0 && s.extra === 0
+  if (!densityOk) densityFailed.push(s.label)
+  if (!shortcutOk) shortcutFailed.push(`${s.label}(누락 ${s.lost}/여분 ${s.extra})`)
+
+  console.log(
+    s.label.padEnd(14) + String(cand.length).padStart(6) + fmt(density).padStart(7) +
+    fmt(sd.median).padStart(10) + String(mix('easy')).padStart(6) + String(mix('medium')).padStart(5) +
+    String(mix('hard')).padStart(6) + (shortcutOk ? '일치' : '불일치').padStart(10) +
+    `   ${densityOk && shortcutOk ? 'PASS' : 'FAIL'}`,
+  )
+}
+
+const pooledDensity = per1000(totalCandidates, totalBars)
+const pooledDensityOk = pooledDensity >= DENSITY_MIN && pooledDensity <= DENSITY_MAX
+console.log('─'.repeat(70))
+console.log(
+  `풀링(${dseries.length}계열)`.padEnd(14) + String(totalCandidates).padStart(6) +
+  fmt(Number(pooledDensity.toFixed(1))).padStart(7) + '—'.padStart(10) + '—'.padStart(6) +
+  '—'.padStart(5) + '—'.padStart(6) + (shortcutFailed.length === 0 ? '일치' : '불일치').padStart(10) +
+  `   ${pooledDensityOk && shortcutFailed.length === 0 ? 'PASS' : 'FAIL'}`,
+)
+
+// ── 판정 ────────────────────────────────────────────────────────────────────
+
+console.log(`\n=== 체크포인트 ② 게이트 판정 ===`)
+console.log(`기준 1(밀도): 모든 계열과 풀링이 1000봉당 ${DENSITY_MIN}~${DENSITY_MAX}개.`)
+console.log(`기준 2(무손실): 2단계 스캔 결과가 전수 정확 스캔과 후보 필드까지 완전히 같아야 한다.`)
+console.log(
+  `계열 ${dseries.length - new Set([...densityFailed, ...shortcutFailed.map((s) => s.split('(')[0])]).size}` +
+  `/${dseries.length} 통과, 풀링 밀도 ${pooledDensity.toFixed(1)} ${pooledDensityOk ? '통과' : '실패'}`,
+)
+
+const densityGateOk = densityFailed.length === 0 && shortcutFailed.length === 0 && pooledDensityOk
+if (densityGateOk) {
+  console.log(
+    `\n판정: PASS — 계열별 밀도가 전부 ${DENSITY_MIN}~${DENSITY_MAX} 안에 있고, ` +
+    `2단계 지름길이 전수 정확 스캔과 한 건도 어긋나지 않는다.`,
+  )
+} else {
+  const why = [
+    densityFailed.length > 0 ? `밀도 이탈 계열: ${densityFailed.join(', ')}` : '',
+    shortcutFailed.length > 0 ? `지름길 불일치: ${shortcutFailed.join(', ')}` : '',
+    !pooledDensityOk ? `풀링 밀도 ${pooledDensity.toFixed(1)}` : '',
+  ].filter(Boolean).join(' / ')
+  console.log(`\n판정: FAIL — ${why}`)
   process.exitCode = 1
 }
