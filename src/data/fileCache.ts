@@ -175,6 +175,6 @@ export async function getCandles(
   if (!isValidCandles(cs)) {
     throw new Error(`${symbol} ${tf}: 받아온 캔들이 검증을 통과하지 못했다 (${n}개)`)
   }
-  writeCache(symbol, tf, limit, cs)
+  writeCache(symbol, tf, limit, cs, endTime)
   return cs
 }

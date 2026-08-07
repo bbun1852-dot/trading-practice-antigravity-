@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest'
 import { rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { cachePath, readCache, writeCache } from './fileCache'
+import { cachePath, readCache, writeCache, getCandles } from './fileCache'
+import { fetchKlines } from './binance'
 import { mk } from '../analysis/fixtures'
+
+// getCandles 는 네트워크를 타므로 fetchKlines 를 갈아끼워 캐시 동작만 본다.
+vi.mock('./binance', () => ({ fetchKlines: vi.fn() }))
 
 /** 실제 심볼과 절대 겹치지 않는 일회용 이름. 테스트가 남기는 파일은 이것뿐이다. */
 const SYM = '__TEST__'
@@ -164,5 +168,48 @@ describe('망가진 캐시는 예외가 아니라 미스가 된다', () => {
     writeCache(SYM, TF, LIMIT, candles())
     expect(existsSync(`${P}.tmp`)).toBe(false)
     expect(existsSync(P)).toBe(true)
+  })
+})
+
+/**
+ * getCandles 가 읽는 키와 쓰는 키는 반드시 같아야 한다. 다르면 캐시는 조용히
+ * 아무 일도 안 하는 물건이 된다 — 매번 네트워크를 타면서 겉으론 멀쩡해 보인다.
+ * (실제로 endTime 을 writeCache 에 넘기지 않아 이 상태였다.)
+ */
+describe('getCandles: 읽는 키와 쓰는 키가 같다', () => {
+  const mocked = vi.mocked(fetchKlines)
+
+  beforeEach(() => {
+    mocked.mockReset()
+    mocked.mockResolvedValue(candles())
+  })
+
+  it('창을 고정하지 않은 경우: 두 번째 호출은 네트워크를 타지 않는다', async () => {
+    expect(await getCandles(SYM, TF, LIMIT)).toEqual(candles())
+    expect(mocked).toHaveBeenCalledTimes(1)
+
+    expect(await getCandles(SYM, TF, LIMIT)).toEqual(candles())
+    expect(mocked).toHaveBeenCalledTimes(1)   // 캐시 적중 — 늘지 않아야 한다
+  })
+
+  it('창을 고정한 경우: 두 번째 호출은 네트워크를 타지 않는다', async () => {
+    expect(await getCandles(SYM, TF, LIMIT, END)).toEqual(candles())
+    expect(mocked).toHaveBeenCalledTimes(1)
+    expect(mocked).toHaveBeenCalledWith(SYM, TF, { limit: LIMIT, endTime: END })
+
+    expect(await getCandles(SYM, TF, LIMIT, END)).toEqual(candles())
+    expect(mocked).toHaveBeenCalledTimes(1)   // 적중해야 한다 — 쓴 키로 다시 읽힌다
+
+    // 고정한 항목이 실제로 고정된 이름/봉투로 저장됐는지
+    expect(existsSync(P_END)).toBe(true)
+    expect(existsSync(P)).toBe(false)
+  })
+
+  it('창이 다르면 서로의 캐시를 쓰지 않는다', async () => {
+    await getCandles(SYM, TF, LIMIT, END)
+    expect(mocked).toHaveBeenCalledTimes(1)
+
+    await getCandles(SYM, TF, LIMIT)          // 창이 다르다 — 다시 받아야 한다
+    expect(mocked).toHaveBeenCalledTimes(2)
   })
 })
