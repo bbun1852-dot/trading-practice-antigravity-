@@ -178,6 +178,8 @@ describe('scanForSetups', () => {
   })
 
   it('모든 후보가 minScore 를 넘는다', () => {
+    // 후보가 하나도 없으면 루프가 돌지 않아 조용히 통과한다. 단언이 실제로 실행됐는지 못박는다.
+    expect.hasAssertions()
     for (const c of scanForSetups(cs, { minScore: 150 })) {
       expect(c.setupScore).toBeGreaterThanOrEqual(150)
     }
@@ -209,11 +211,19 @@ describe('scanForSetups', () => {
   })
 
   it('워밍업 구간에서는 후보를 내지 않는다', () => {
-    expect(scanForSetups(cs).every((c) => c.barIndex >= WARMUP)).toBe(true)
+    // WARMUP 을 그대로 비교에 쓰면 이 검사는 항상 참이다 — scanForSetups 가 i = WARMUP
+    // 부터 훑고 병합은 거르고 정렬만 하므로, WARMUP 이 몇이든 구조적으로 성립한다.
+    // 지켜야 할 성질은 "WARMUP 이 상수를 따라 내려가지 않는다" 이므로 리터럴로 못박는다.
+    // 지표(EMA200 등)가 아직 덜 데워진 구간에서 후보가 나오면 안 된다.
+    expect(WARMUP).toBe(120)
+
+    const out = scanForSetups(cs)
+    expect(out.length).toBeGreaterThan(0)   // 빈 배열이면 every 가 공허하게 참이다
+    for (const c of out) expect(c.barIndex).toBeGreaterThanOrEqual(120)
   })
 
   it('워밍업보다 짧은 입력은 후보가 없다', () => {
-    expect(scanForSetups(synthCandles(WARMUP), { minScore: 0 })).toEqual([])
+    expect(scanForSetups(synthCandles(120), { minScore: 0 })).toEqual([])
     expect(scanForSetups([], { minScore: 0 })).toEqual([])
   })
 })
