@@ -13,16 +13,50 @@ export type SetupCandidate = {
   activeCount: number
 }
 
+/**
+ * 채점기·재생기(replay)가 쓰는 전체 레코드. **솔버에게 그대로 넘기면 안 된다** —
+ * candles 에 은닉 구간이 그대로 들어 있고, symbol/startTime/type 이 최상위
+ * 필드로 노출돼 있다. 솔버가 볼 수 있는 부분만 꺼내려면 generator.ts 의
+ * solverView() 를, 채점 뒤에만 공개할 값은 revealed() 를 쓴다 — 이 객체를
+ * 직접 JSON.stringify 해서 클라이언트로 보내지 않는다.
+ */
 export type Question = {
+  /** 채점 뒤에만 공개 — revealed() 를 거친다 */
   symbol: string
   timeframe: Timeframe
-  /** 창 첫 봉의 time (초). {symbol, timeframe, startTime, decisionIndex} 가 재현 키다 */
+  /**
+   * 창 첫 봉의 time (초). {symbol, timeframe, startTime, decisionIndex} 가 재현 키다.
+   * 채점 뒤에만 공개 — revealed() 를 거친다.
+   */
   startTime: number
   /** 창 내 인덱스. 이 봉까지가 사용자에게 보인다 */
   decisionIndex: number
+  /**
+   * 함정/노셋업 여부는 은닉 구간(classifyOutcome)에서 파생된다 — 근거를 하나도
+   * 안 짚고 이 값만 보고도 답을 뒤집어 맞힐 수 있다. 채점 뒤에만 공개 —
+   * revealed() 를 거친다.
+   */
   type: QuestionType
+  /**
+   * 결정 시점의 유효 근거만으로 계산한다(activeSignalsAt 이 미래 신호를 아예
+   * 걸러낸다) — type 과 달리 은닉 구간과 무관하고, 풀기 전에 보여줘도 안전하다.
+   */
   difficulty: Difficulty
-  /** 은닉 구간을 포함한 창 전체 */
+  /** 은닉 구간을 포함한 창 전체. 솔버에게는 decisionIndex 까지만 잘라서 보여준다(solverView) */
+  candles: Candle[]
+}
+
+/**
+ * 솔버가 풀 때 실제로 볼 수 있는 전부. Question 의 일부를 가린 것이 아니라 별도
+ * 타입이다 — symbol·startTime·type·decisionIndex 필드 자체가 없고, candles 에는
+ * 은닉 봉이 원천적으로 없다(길이가 곧 결정 인덱스+1이다). 이 값을 들고 있는
+ * 코드는 원본 Question 을 함께 갖고 있지 않은 한 정답 관련 정보에 접근할 방법이
+ * 없다 — generator.ts 의 solverView() 로만 만든다.
+ */
+export type SolverView = {
+  timeframe: Timeframe
+  difficulty: Difficulty
+  /** decisionIndex 까지만. 마지막 원소가 곧 결정 봉이다 */
   candles: Candle[]
 }
 

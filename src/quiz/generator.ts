@@ -2,7 +2,7 @@ import type { Candle, Timeframe } from '../data/types'
 import { atr } from '../analysis/indicators'
 import { activeSignalsAt } from './lifetime'
 import { dominantSide, difficultyOf } from './scanner'
-import type { Direction, Question, QuestionType, SetupCandidate } from './types'
+import type { Direction, Question, QuestionType, SetupCandidate, SolverView } from './types'
 
 /** 창 구성: 워밍업(지표·신호 안정화) + 가시 구간 + 은닉 구간 */
 export const WARMUP = 120
@@ -131,16 +131,42 @@ export function makeQuestion(
     timeframe: tf,
     startTime: window[0].time,
     decisionIndex,
+    // direction 은 은닉 구간을 읽어서 나온 값이라 type 도 정답 파생값이다 — 풀기 전엔
+    // 노출 금지(solverView 에 없음, revealed() 로만 공개).
     type: classifyType(direction, active.length, dom),
+    // active 는 decisionIndex 시점의 유효 근거만이다(activeSignalsAt 이 미래 신호를
+    // 애초에 걸러낸다) — difficulty 는 은닉 구간과 무관하고 풀기 전에 보여줘도 안전하다.
     difficulty: difficultyOf(active),
     candles: window,
   }
 }
 
 /**
- * 종목과 시각은 채점이 끝난 뒤에만 공개한다.
- * 문제 중에 알면 기억으로 답을 맞히게 되어 연습이 성립하지 않는다(스펙 5.2).
+ * 솔버가 풀 때 실제로 보게 되는 투영(projection). `Question` 을 그대로 넘기면
+ * `candles` 에 은닉 봉이, 최상위 필드에 symbol/startTime/type 이 그대로 실려
+ * 있어서 `JSON.stringify(question)` 한 번으로 정답이 나간다 — 이 함수가 유일하게
+ * 안전한 경로다.
+ *
+ * 구조적으로 안전하다: 반환 타입(SolverView)에는 symbol/startTime/type/decisionIndex
+ * 필드 자체가 없고(관습이 아니라 타입에 없다), candles 는 slice 로 만든 새 배열이라
+ * 은닉 봉 참조가 아예 들어 있지 않다. 이 반환값을 들고 있는 코드는 원본 Question 을
+ * 함께 갖고 있지 않은 한 은닉 봉이나 비밀 필드에 접근할 방법이 없다.
  */
-export function revealed(q: Question): { symbol: string; time: number } {
-  return { symbol: q.symbol, time: q.candles[q.decisionIndex].time }
+export function solverView(q: Question): SolverView {
+  return {
+    timeframe: q.timeframe,
+    difficulty: q.difficulty,
+    candles: q.candles.slice(0, q.decisionIndex + 1),
+  }
+}
+
+/**
+ * 채점이 끝난 뒤에만 공개하는 것들 — 종목, 결정 봉의 시각, 그리고 문제 유형.
+ * type 을 여기 포함하는 이유: 함정/노셋업 여부는 은닉 구간에서 파생되므로
+ * symbol/time 못지않게 정답을 흘린다 — 방향을 하나도 안 짚고 "함정이니 반대로"
+ * 만 해도 맞힐 수 있다. 문제 중에 알면 기억으로 답을 맞히거나(symbol/time),
+ * 근거 없이 답만 뒤집어서(type) 맞히게 되어 연습이 성립하지 않는다(스펙 5.2).
+ */
+export function revealed(q: Question): { symbol: string; time: number; type: QuestionType } {
+  return { symbol: q.symbol, time: q.candles[q.decisionIndex].time, type: q.type }
 }

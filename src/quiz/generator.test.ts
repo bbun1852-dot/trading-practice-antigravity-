@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  classifyOutcome, makeQuestion, revealed,
+  classifyOutcome, makeQuestion, revealed, solverView,
   WARMUP, VISIBLE, HIDDEN, MIN_EVIDENCE, MAX_EVIDENCE,
 } from './generator'
 import { scanForSetups } from './scanner'
@@ -132,11 +132,41 @@ describe('makeQuestion', () => {
     expect(a).toBeGreaterThan(0)
   })
 
-  it('revealed 로만 종목과 시각을 꺼낸다', () => {
+  it('revealed 로만 종목·시각·유형을 꺼낸다', () => {
     const q = makeQuestion(cs, 'BTCUSDT', '4h', cand!)!
     const r = revealed(q)
     expect(r.symbol).toBe('BTCUSDT')
     expect(r.time).toBe(q.candles[q.decisionIndex].time)
+    expect(r.type).toBe(q.type)
+  })
+
+  describe('solverView — 솔버가 볼 수 있는 투영', () => {
+    const q = makeQuestion(cs, 'BTCUSDT', '4h', cand!)!
+    const view = solverView(q)
+
+    it('candles 가 decisionIndex 까지만이고 은닉 봉이 배열에 아예 없다', () => {
+      expect(view.candles).toHaveLength(q.decisionIndex + 1)
+      expect(view.candles).toEqual(q.candles.slice(0, q.decisionIndex + 1))
+    })
+
+    it('마지막 캔들이 곧 결정 봉이다 (참조 동일성)', () => {
+      expect(view.candles[view.candles.length - 1]).toBe(q.candles[q.decisionIndex])
+    })
+
+    it('timeframe·difficulty 는 원본과 같다', () => {
+      expect(view.timeframe).toBe(q.timeframe)
+      expect(view.difficulty).toBe(q.difficulty)
+    })
+
+    it('비밀 필드(symbol/startTime/type/decisionIndex)가 키로도 존재하지 않는다', () => {
+      // 몇 개만 기억해서 확인하는 게 아니라, 반환 객체의 키 전체를 고정한다 —
+      // 나중에 누가 편의상 symbol 이나 type 을 슬쩍 끼워 넣어도 여기서 잡힌다.
+      expect(Object.keys(view).sort()).toEqual(['candles', 'difficulty', 'timeframe'])
+      expect('symbol' in view).toBe(false)
+      expect('startTime' in view).toBe(false)
+      expect('type' in view).toBe(false)
+      expect('decisionIndex' in view).toBe(false)
+    })
   })
 
   describe('근거 개수 게이트 (Task 5 실측 대역 8~15)', () => {
