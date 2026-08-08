@@ -205,6 +205,14 @@ const DENSITY_MAX = 40
 const PROBE_MINS = [110, 115, 120, 125, 130, 135, 140, 145, 150]
 
 /**
+ * 난이도 축이 정보를 갖는지의 기준. 한 계층이 10% 미만이면 그 난이도는 사실상 존재하지
+ * 않는 것이고, 70%를 넘으면 난이도가 상수라 축이 아무 말도 못 한다.
+ * (개수 기준 규칙이 easy 0.4% 로 무너졌던 것을 다시 놓치지 않기 위한 계기판이다.)
+ */
+const TIER_SHARE_MIN = 10
+const TIER_SHARE_MAX = 70
+
+/**
  * 지름길 없이 모든 봉에 정확 경로(activeSignalsAt)를 돌린 봉별 점수표. 1000봉에 약 2초.
  * 이 표가 (a) 임계값 스윕의 재료이자 (b) 2단계 스캐너를 채점할 기준 답안이다.
  */
@@ -290,6 +298,7 @@ const densityFailed: string[] = []
 const shortcutFailed: string[] = []
 let totalCandidates = 0
 let totalBars = 0
+const tierCount: Record<string, number> = { easy: 0, medium: 0, hard: 0 }
 
 for (const s of dseries) {
   const cand = reference(s.rows, DEFAULT_MIN_SCORE)
@@ -299,6 +308,7 @@ for (const s of dseries) {
 
   const sd = dist(cand.map((c) => c.setupScore))
   const mix = (d: string) => cand.filter((c) => c.difficulty === d).length
+  for (const d of ['easy', 'medium', 'hard']) tierCount[d] += mix(d)
   const densityOk = density >= DENSITY_MIN && density <= DENSITY_MAX
   const shortcutOk = s.lost === 0 && s.extra === 0
   if (!densityOk) densityFailed.push(s.label)
@@ -322,27 +332,48 @@ console.log(
   `   ${pooledDensityOk && shortcutFailed.length === 0 ? 'PASS' : 'FAIL'}`,
 )
 
+// ── 난이도 계층 분포 ────────────────────────────────────────────────────────
+//
+// 난이도가 한 값에 쏠려 있으면 그 축은 문제 배분에도 사용자 안내에도 쓸모가 없다.
+// 개수 기준 규칙이 easy 0.4% 로 사실상 죽어 있던 것을 놓쳤던 자리라 계기판을 붙여 둔다.
+
+console.log(`\n=== 난이도 계층 분포 (후보 ${totalCandidates}개) ===`)
+console.log(`${'계층'.padEnd(10)}${'개수'.padStart(7)}${'비율'.padStart(8)}   판정`)
+const tierFailed: string[] = []
+for (const d of ['easy', 'medium', 'hard']) {
+  const share = (tierCount[d] / totalCandidates) * 100
+  const tierOk = share >= TIER_SHARE_MIN && share <= TIER_SHARE_MAX
+  if (!tierOk) tierFailed.push(`${d} ${share.toFixed(1)}%`)
+  console.log(
+    d.padEnd(10) + String(tierCount[d]).padStart(7) + `${share.toFixed(1)}%`.padStart(8) +
+    `   ${tierOk ? 'PASS' : 'FAIL'}`,
+  )
+}
+
 // ── 판정 ────────────────────────────────────────────────────────────────────
 
 console.log(`\n=== 체크포인트 ② 게이트 판정 ===`)
 console.log(`기준 1(밀도): 모든 계열과 풀링이 1000봉당 ${DENSITY_MIN}~${DENSITY_MAX}개.`)
 console.log(`기준 2(무손실): 2단계 스캔 결과가 전수 정확 스캔과 후보 필드까지 완전히 같아야 한다.`)
+console.log(`기준 3(난이도): 어떤 계층도 ${TIER_SHARE_MIN}% 미만이거나 ${TIER_SHARE_MAX}% 초과가 아니어야 한다.`)
 console.log(
   `계열 ${dseries.length - new Set([...densityFailed, ...shortcutFailed.map((s) => s.split('(')[0])]).size}` +
   `/${dseries.length} 통과, 풀링 밀도 ${pooledDensity.toFixed(1)} ${pooledDensityOk ? '통과' : '실패'}`,
 )
 
-const densityGateOk = densityFailed.length === 0 && shortcutFailed.length === 0 && pooledDensityOk
+const densityGateOk = densityFailed.length === 0 && shortcutFailed.length === 0 &&
+  pooledDensityOk && tierFailed.length === 0
 if (densityGateOk) {
   console.log(
     `\n판정: PASS — 계열별 밀도가 전부 ${DENSITY_MIN}~${DENSITY_MAX} 안에 있고, ` +
-    `2단계 지름길이 전수 정확 스캔과 한 건도 어긋나지 않는다.`,
+    `2단계 지름길이 전수 정확 스캔과 한 건도 어긋나지 않으며, 난이도 세 계층이 모두 살아 있다.`,
   )
 } else {
   const why = [
     densityFailed.length > 0 ? `밀도 이탈 계열: ${densityFailed.join(', ')}` : '',
     shortcutFailed.length > 0 ? `지름길 불일치: ${shortcutFailed.join(', ')}` : '',
     !pooledDensityOk ? `풀링 밀도 ${pooledDensity.toFixed(1)}` : '',
+    tierFailed.length > 0 ? `난이도 계층 쏠림: ${tierFailed.join(', ')}` : '',
   ].filter(Boolean).join(' / ')
   console.log(`\n판정: FAIL — ${why}`)
   process.exitCode = 1

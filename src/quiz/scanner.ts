@@ -73,26 +73,50 @@ export function dominantSide(signals: Signal[]): 'bullish' | 'bearish' | 'neutra
 }
 
 /**
- * 문제 난이도. dominantSide 가 가중치로 방향을 정하는 것과 달리 여기서는 개수로 센다 —
- * 난이도는 "몇 가지가 어느 쪽을 가리키느냐" 의 문제이지 그 무게의 문제가 아니다.
- *
- * 방향 근거가 하나도 없으면(신호가 없거나 전부 중립) hard 다. 짚을 게 없는 자리가
- * 제일 어렵다 — 이 경우를 medium 으로 두면 "근거 0개" 가 "한쪽으로 2개" 와 같은
- * 난이도가 되어 버린다.
+ * 쏠림도 = 우세한 쪽의 가중치 / 양쪽 가중치 합. 방향 근거가 없으면 null.
+ * 0.5(완전 팽팽) ~ 1.0(한쪽뿐) 사이의 값이다.
  */
-export function difficultyOf(signals: Signal[]): Difficulty {
+function agreementRatio(signals: Signal[]): number | null {
   let bull = 0
   let bear = 0
   for (const s of signals) {
-    if (s.side === 'bullish') bull++
-    else if (s.side === 'bearish') bear++
+    const w = TIER_WEIGHT[s.tier] * s.strength
+    if (s.side === 'bullish') bull += w
+    else if (s.side === 'bearish') bear += w
   }
-  if (bull + bear === 0) return 'hard'
+  const total = bull + bear
+  if (total === 0) return null
+  return Math.max(bull, bear) / total
+}
 
-  const agree = Math.max(bull, bear)
-  const conflict = Math.min(bull, bear)
-  if (agree >= 4 && conflict === 0) return 'easy'
-  if (conflict > 0 && Math.abs(bull - bear) <= 1) return 'hard'
+/** 우세한 쪽이 전체 가중치의 75% 이상 — 반대편의 3배 이상이면 방향이 뚜렷하다 */
+const EASY_AGREEMENT = 0.75
+/** 우세한 쪽이 62% 미만 — 반대편이 전체의 38% 넘게 차지하면 사실상 팽팽하다 */
+const HARD_AGREEMENT = 0.62
+
+/**
+ * 문제 난이도. dominantSide 와 같은 잣대(TIER_WEIGHT × strength)로 재고, "몇 개가
+ * 어느 쪽이냐" 가 아니라 "근거의 무게가 얼마나 한쪽으로 쏠렸느냐" 로 나눈다.
+ *
+ * 개수로 세던 원래 규칙(같은 방향 4개 이상 + 상충 0개 → easy / 개수 차 1 이하 → hard)은
+ * 실데이터에서 사실상 상수였다. 유효 근거 중앙값이 11개인데 그중 반대편이 **정확히 0개**
+ * 인 자리는 거의 없어서 easy 가 273개 중 1개(0.4%)였고, hard 도 "개수 차 1 이하" 라는
+ * 좁은 표적이라 12%에 그쳤다. 두 계층이 같은 이유로 희귀했다 — 근거가 많은 집합에
+ * 개수 기준을 들이댄 것이 원인이다. 가중치 비율은 근거 수가 늘어도 눈금이 무너지지 않는다.
+ *
+ * 임계값은 실측으로 정했다 (심볼 5종 × 4h/1d, 후보 273개). 확정값에서의 계층 비율은
+ * easy 37.0% / medium 31.9% / hard 31.1% 이고, 표본외 창(2025-10-01, 후보 279개)에서도
+ * 37.3 / 30.5 / 32.3 으로 같다. 어떤 계층도 10% 미만이거나 70% 초과가 아니다.
+ *
+ * 방향 근거가 하나도 없으면(신호가 없거나 전부 중립) hard 다. 짚을 게 없는 자리가
+ * 제일 어렵다 — 이 경우를 easy 쪽으로 흘리면 "근거가 없다" 가 "근거가 한쪽뿐이다" 로
+ * 둔갑한다.
+ */
+export function difficultyOf(signals: Signal[]): Difficulty {
+  const agreement = agreementRatio(signals)
+  if (agreement === null) return 'hard'
+  if (agreement >= EASY_AGREEMENT) return 'easy'
+  if (agreement < HARD_AGREEMENT) return 'hard'
   return 'medium'
 }
 

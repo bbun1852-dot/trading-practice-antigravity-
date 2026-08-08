@@ -68,26 +68,55 @@ describe('dominantSide', () => {
 })
 
 describe('difficultyOf', () => {
-  it('한 방향으로 4개 이상 모이고 반대가 없으면 easy', () => {
+  it('반대편이 없으면 easy', () => {
     const s = [1, 2, 3, 4].map((i) => sig(`a${i}`, 4, 'candle', 'bullish'))
     expect(difficultyOf(s)).toBe('easy')
   })
 
-  it('상충하면서 개수가 팽팽하면 hard', () => {
+  it('가중치가 팽팽하면 hard', () => {
     const s = [sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bearish')]
     expect(difficultyOf(s)).toBe('hard')
   })
 
-  it('상충해도 한쪽이 확실히 우세하면 medium', () => {
-    const s = [...[1, 2, 3, 4, 5].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')), sig('b', 4, 'candle', 'bearish')]
+  it('우세한 쪽이 3배 이상이면 easy', () => {
+    // bullish 4×(2×1)=8, bearish 1×(2×1)=2 → 쏠림도 0.80 ≥ 0.75
+    const s = [...[1, 2, 3, 4].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')), sig('b', 4, 'candle', 'bearish')]
+    expect(difficultyOf(s)).toBe('easy')
+  })
+
+  it('우세하지만 3배에는 못 미치면 medium', () => {
+    // bullish 5×2=10, bearish 2×2=4 → 쏠림도 0.714 (0.62 이상 0.75 미만)
+    const s = [
+      ...[1, 2, 3, 4, 5].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')),
+      sig('b1', 4, 'candle', 'bearish'), sig('b2', 4, 'candle', 'bearish'),
+    ]
     expect(difficultyOf(s)).toBe('medium')
   })
 
-  it('한 방향뿐이지만 수가 적으면 medium', () => {
-    expect(difficultyOf([sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bullish')])).toBe('medium')
+  it('개수가 아니라 가중치로 나눈다 — 수는 밀려도 무거우면 쏠린 것이다', () => {
+    // bullish 1×(5×3)=15, bearish 3×(2×1)=6 → 쏠림도 0.714 → medium.
+    // 개수로만 보면 1:3 이라 '반대가 우세' 로 읽히지만 무게로는 오히려 bullish 가 앞선다.
+    const s = [
+      sig('a', 1, 'smc', 'bullish', 3),
+      sig('b1', 4, 'candle', 'bearish'), sig('b2', 4, 'candle', 'bearish'), sig('b3', 4, 'candle', 'bearish'),
+    ]
+    expect(difficultyOf(s)).toBe('medium')
   })
 
-  // 아래 두 개가 브리프 코드의 구멍이다: 방향 근거가 0개인데 'medium' 이 나왔다.
+  it('한 방향뿐이면 개수가 적어도 easy — 반대 근거가 없으니 헷갈릴 것이 없다', () => {
+    // 개수 기준(4개 이상)이었다면 medium 이었다. 가중치 기준에서는 상충이 0이면 easy 다.
+    expect(difficultyOf([sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bullish')])).toBe('easy')
+  })
+
+  it('중립 신호는 쏠림도를 흐리지 않는다', () => {
+    // 중립을 분모에 넣으면 쏠림도가 내려가 난이도가 뒤바뀐다. 방향 근거만으로 잰다.
+    const s = [
+      sig('a', 1, 'smc', 'bullish'),
+      ...[1, 2, 3].map((i) => sig(`n${i}`, 3, 'structure', 'neutral')),
+    ]
+    expect(difficultyOf(s)).toBe('easy')
+  })
+
   it('신호가 하나도 없으면 hard — 짚을 근거가 없다', () => {
     expect(difficultyOf([])).toBe('hard')
   })
@@ -95,6 +124,20 @@ describe('difficultyOf', () => {
   it('전부 중립이면 hard — 방향 근거가 0개인 것은 근거가 없는 것과 같다', () => {
     const s = [1, 2, 3, 4, 5].map((i) => sig(`n${i}`, 3, 'structure', 'neutral'))
     expect(difficultyOf(s)).toBe('hard')
+  })
+
+  it('경계값: 쏠림도 0.75 는 easy, 0.62 는 medium', () => {
+    // 정확히 0.75 → easy (>= 이므로). bullish 3×2=6, bearish 1×2=2 → 6/8 = 0.75
+    expect(difficultyOf([
+      ...[1, 2, 3].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')), sig('b', 4, 'candle', 'bearish'),
+    ])).toBe('easy')
+    // 정확히 0.62 → medium (hard 는 미만이므로). bullish 31, bearish 19 → 31/50 = 0.62
+    expect(difficultyOf([
+      sig('a', 3, 'structure', 'bullish', 3),                                  // 9
+      sig('a2', 4, 'candle', 'bullish', 3), sig('a3', 4, 'ma', 'bullish', 3),  // 6+6 = 12
+      sig('a4', 4, 'momentum', 'bullish', 3), sig('a5', 4, 'volume', 'bullish', 2), // 6+4 = 10
+      sig('b', 1, 'smc', 'bearish', 3), sig('b2', 4, 'candle', 'bearish', 2),  // 15+4 = 19
+    ])).toBe('medium')
   })
 })
 
