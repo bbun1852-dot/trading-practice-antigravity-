@@ -1,9 +1,10 @@
 import { getCandles } from '../src/data/fileCache'
-import { activeSignalsAt } from '../src/quiz/lifetime'
+import { activeSignalsAt, filterActive } from '../src/quiz/lifetime'
+import { detectAll } from '../src/analysis/signals'
 import { TAGS, TAG_BY_ID, type LifetimeClass } from '../src/quiz/taxonomy'
 import {
   scanForSetups, mergeCandidates, setupScore, difficultyOf, dominantSide,
-  WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW,
+  WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW, COARSE_SLACK,
 } from '../src/quiz/scanner'
 import type { SetupCandidate } from '../src/quiz/types'
 import type { Candle, Timeframe } from '../src/data/types'
@@ -213,22 +214,47 @@ const TIER_SHARE_MIN = 10
 const TIER_SHARE_MAX = 70
 
 /**
- * 지름길 없이 모든 봉에 정확 경로(activeSignalsAt)를 돌린 봉별 점수표. 1000봉에 약 2초.
- * 이 표가 (a) 임계값 스윕의 재료이자 (b) 2단계 스캐너를 채점할 기준 답안이다.
+ * 지름길 없이 모든 봉에 정확 경로(activeSignalsAt)를 돌린 봉별 점수표와, 같은 봉에서
+ * 1단계 근사가 얼마나 어긋나는지를 함께 잰다. 1000봉에 약 2초.
+ *
+ * 점수표는 (a) 임계값 스윕의 재료이자 (b) 2단계 스캐너를 채점할 기준 답안이다.
+ *
+ * **간극(gap)은 병합 전에, 봉 단위로 잰다.** 병합 뒤 후보만 비교하면 NMS 가 어차피
+ * 억제했을 봉에서 일어난 누락이 보이지 않는다. 그런데 coarseFloor 를 넘지 못해
+ * 떨어지는 봉은 정확 점수가 minScore 바로 위인 봉 — 즉 창 안에서 점수가 가장 낮아
+ * NMS 가 버릴 가능성이 큰 봉이다. 실패가 몰리는 자리가 곧 병합 후 비교가 가장 둔한
+ * 자리라, 병합 후 비교만으로는 COARSE_SLACK 을 회귀 검사할 수 없다.
  */
-function exactRows(cs: Candle[]): SetupCandidate[] {
-  const out: SetupCandidate[] = []
+function measureSeries(cs: Candle[]): { rows: SetupCandidate[]; maxGap: number; minGap: number } {
+  const all = detectAll(cs)
+  const rows: SetupCandidate[] = []
+  let maxGap = -Infinity
+  let minGap = Infinity
+
   for (let i = WARMUP; i < cs.length; i++) {
     const active = activeSignalsAt(cs, i)
-    out.push({
+    const exact = setupScore(active)
+    const coarse = setupScore(filterActive(cs, all, i))
+
+    // gap > 0 : 1단계가 낮게 봤다(과소추정). COARSE_SLACK 이 막아야 하는 방향이다.
+    // gap < 0 : 1단계가 높게 봤다(과대추정). setupScore 의 conflict 항이 단조가 아니라
+    //           신호가 빠지면 min(bull,bear) 이 줄어 점수가 오르는 경우를 구성할 수는
+    //           있다. 다만 실측에서는 한 번도 관측되지 않았다(아래 표의 '과대추정 최대'
+    //           가 전부 0이면 그런 뜻이다). 관측되더라도 안전한 방향이다 — 후보를 넉넉히
+    //           통과시킬 뿐이고 2단계가 정확 점수로 다시 걸러낸다. 게이트는 양의 꼬리만 본다.
+    const gap = exact - coarse
+    if (gap > maxGap) maxGap = gap
+    if (gap < minGap) minGap = gap
+
+    rows.push({
       barIndex: i,
-      setupScore: setupScore(active),
+      setupScore: exact,
       difficulty: difficultyOf(active),
       dominantSide: dominantSide(active),
       activeCount: active.length,
     })
   }
-  return out
+  return { rows, maxGap, minGap }
 }
 
 /** 전수 점수표에서 minScore 로 거르고 스캐너와 같은 병합을 적용한 기준 답안 */
@@ -244,13 +270,17 @@ type DensitySeries = {
   lost: number
   /** 2단계 스캔에는 있는데 전수 스캔에는 없는 후보 수 */
   extra: number
+  /** 봉 단위 과소추정 최대 (양수). COARSE_SLACK 이 덮어야 하는 값이다 */
+  maxGap: number
+  /** 봉 단위 과대추정 최대 (음수). 정보용이며 실패 조건이 아니다 */
+  minGap: number
 }
 
 console.log(`\n\n=== 후보 밀도 측정 (계열마다 전수 정확 스캔 1회) ===`)
 const dseries: DensitySeries[] = []
 for (const [label, cs] of candlesOf) {
   const t = Date.now()
-  const rows = exactRows(cs)
+  const { rows, maxGap, minGap } = measureSeries(cs)
   const fast = scanForSetups(cs, { minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })
   const ref = reference(rows, DEFAULT_MIN_SCORE)
   // 후보는 필드 전부가 같아야 한다 — barIndex 만 맞고 점수·난이도가 다르면 그것도 불일치다.
@@ -258,7 +288,7 @@ for (const [label, cs] of candlesOf) {
   const refKeys = new Set(ref.map((c) => JSON.stringify(c)))
   const lost = [...refKeys].filter((k) => !fastKeys.has(k)).length
   const extra = [...fastKeys].filter((k) => !refKeys.has(k)).length
-  dseries.push({ label, bars: cs.length, rows, lost, extra })
+  dseries.push({ label, bars: cs.length, rows, lost, extra, maxGap, minGap })
   console.log(`  ${label.padEnd(14)} 전수 ${String(Date.now() - t).padStart(5)}ms  후보 ${String(fast.length).padStart(3)}개`)
 }
 
@@ -332,6 +362,42 @@ console.log(
   `   ${pooledDensityOk && shortcutFailed.length === 0 ? 'PASS' : 'FAIL'}`,
 )
 
+// ── 1단계 과소추정 폭 (COARSE_SLACK 회귀 검사) ──────────────────────────────
+//
+// 이 표가 shipped 상수 COARSE_SLACK 이 실제로 기대는 측정이다. 병합이 끼지 않은
+// 봉 단위 비교라, 어느 봉에서 어긋나든 반드시 여기 잡힌다.
+
+console.log(`\n=== 1단계 근사 오차 (봉 단위, 병합 전) · COARSE_SLACK = ${COARSE_SLACK} ===`)
+console.log(
+  `${'계열'.padEnd(14)}${'과소추정 최대'.padStart(14)}${'여유'.padStart(7)}` +
+  `${'과대추정 최대'.padStart(14)}   판정`,
+)
+
+const gapFailed: string[] = []
+let worstGap = -Infinity
+let worstNegGap = Infinity
+for (const s of dseries) {
+  const gapOk = s.maxGap < COARSE_SLACK
+  if (!gapOk) gapFailed.push(`${s.label}(${s.maxGap})`)
+  if (s.maxGap > worstGap) worstGap = s.maxGap
+  if (s.minGap < worstNegGap) worstNegGap = s.minGap
+  console.log(
+    s.label.padEnd(14) + String(s.maxGap).padStart(14) + String(COARSE_SLACK - s.maxGap).padStart(7) +
+    String(s.minGap).padStart(14) + `   ${gapOk ? 'PASS' : 'FAIL'}`,
+  )
+}
+console.log('─'.repeat(56))
+console.log(
+  '전 계열'.padEnd(14) + String(worstGap).padStart(14) + String(COARSE_SLACK - worstGap).padStart(7) +
+  String(worstNegGap).padStart(14) + `   ${gapFailed.length === 0 ? 'PASS' : 'FAIL'}`,
+)
+console.log(
+  `\n과소추정(양수)만 위험하다 — 1단계가 낮게 봐서 후보가 coarseFloor 밑으로 떨어지는 방향이다.\n` +
+  `과대추정(음수)은 setupScore 의 conflict 항이 단조가 아니라 이론상 가능하지만 위 표대로\n` +
+  `한 번도 관측되지 않았다(전부 0). 관측되더라도 후보를 넉넉히 통과시킬 뿐 2단계가 정확\n` +
+  `점수로 다시 거르므로 안전하다. 그래서 게이트는 양의 꼬리만 본다.`,
+)
+
 // ── 난이도 계층 분포 ────────────────────────────────────────────────────────
 //
 // 난이도가 한 값에 쏠려 있으면 그 축은 문제 배분에도 사용자 안내에도 쓸모가 없다.
@@ -355,24 +421,30 @@ for (const d of ['easy', 'medium', 'hard']) {
 console.log(`\n=== 체크포인트 ② 게이트 판정 ===`)
 console.log(`기준 1(밀도): 모든 계열과 풀링이 1000봉당 ${DENSITY_MIN}~${DENSITY_MAX}개.`)
 console.log(`기준 2(무손실): 2단계 스캔 결과가 전수 정확 스캔과 후보 필드까지 완전히 같아야 한다.`)
-console.log(`기준 3(난이도): 어떤 계층도 ${TIER_SHARE_MIN}% 미만이거나 ${TIER_SHARE_MAX}% 초과가 아니어야 한다.`)
+console.log(`기준 3(근사 오차): 봉 단위 과소추정 최대가 COARSE_SLACK(${COARSE_SLACK}) 미만이어야 한다.`)
+console.log(`기준 4(난이도): 어떤 계층도 ${TIER_SHARE_MIN}% 미만이거나 ${TIER_SHARE_MAX}% 초과가 아니어야 한다.`)
 console.log(
   `계열 ${dseries.length - new Set([...densityFailed, ...shortcutFailed.map((s) => s.split('(')[0])]).size}` +
   `/${dseries.length} 통과, 풀링 밀도 ${pooledDensity.toFixed(1)} ${pooledDensityOk ? '통과' : '실패'}`,
 )
 
 const densityGateOk = densityFailed.length === 0 && shortcutFailed.length === 0 &&
-  pooledDensityOk && tierFailed.length === 0
+  pooledDensityOk && gapFailed.length === 0 && tierFailed.length === 0
 if (densityGateOk) {
   console.log(
     `\n판정: PASS — 계열별 밀도가 전부 ${DENSITY_MIN}~${DENSITY_MAX} 안에 있고, ` +
-    `2단계 지름길이 전수 정확 스캔과 한 건도 어긋나지 않으며, 난이도 세 계층이 모두 살아 있다.`,
+    `2단계 지름길이 전수 정확 스캔과 한 건도 어긋나지 않으며, ` +
+    `과소추정 최대 ${worstGap} < COARSE_SLACK ${COARSE_SLACK} (여유 ${COARSE_SLACK - worstGap}), ` +
+    `난이도 세 계층이 모두 살아 있다.`,
   )
 } else {
   const why = [
     densityFailed.length > 0 ? `밀도 이탈 계열: ${densityFailed.join(', ')}` : '',
     shortcutFailed.length > 0 ? `지름길 불일치: ${shortcutFailed.join(', ')}` : '',
     !pooledDensityOk ? `풀링 밀도 ${pooledDensity.toFixed(1)}` : '',
+    gapFailed.length > 0
+      ? `과소추정이 COARSE_SLACK(${COARSE_SLACK}) 이상인 계열: ${gapFailed.join(', ')} — 상수를 올려야 한다`
+      : '',
     tierFailed.length > 0 ? `난이도 계층 쏠림: ${tierFailed.join(', ')}` : '',
   ].filter(Boolean).join(' / ')
   console.log(`\n판정: FAIL — ${why}`)

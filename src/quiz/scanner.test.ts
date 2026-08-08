@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   setupScore, dominantSide, difficultyOf, mergeCandidates, scanForSetups,
-  WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW,
+  WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW, COARSE_SLACK,
 } from './scanner'
 import { activeSignalsAt, filterActive } from './lifetime'
 import { detectAll } from '../analysis/signals'
@@ -292,6 +292,33 @@ describe('1단계 근사와 정확 집합의 부분집합 관계', () => {
     }
     return out
   }
+
+  it('1단계 과소추정이 COARSE_SLACK 을 넘지 않는다 (병합 전, 봉 단위)', () => {
+    // shipped 상수 COARSE_SLACK 이 기대는 측정을 회귀로 고정한다.
+    // 병합 뒤 후보만 비교하면 NMS 가 어차피 억제했을 봉의 누락이 안 보인다 — 그런데
+    // coarseFloor 에 걸려 떨어지는 봉은 창 안에서 점수가 가장 낮은, 바로 NMS 가 버릴
+    // 봉이다. 그래서 실패가 몰리는 자리와 병합 후 비교가 둔한 자리가 정확히 겹친다.
+    // 여기서는 봉 단위로 직접 잰다.
+    const all = detectAll(cs)
+    let maxGap = -Infinity
+    let minGap = Infinity
+    for (let i = WARMUP; i < cs.length; i++) {
+      // 양수 = 1단계가 낮게 봤다(과소추정). COARSE_SLACK 이 막아야 하는 방향이다.
+      const gap = setupScore(activeSignalsAt(cs, i)) - setupScore(filterActive(cs, all, i))
+      if (gap > maxGap) maxGap = gap
+      if (gap < minGap) minGap = gap
+    }
+    expect(maxGap, `과소추정 최대 ${maxGap} 가 COARSE_SLACK ${COARSE_SLACK} 이상이다`)
+      .toBeLessThan(COARSE_SLACK)
+    // 실제로 과소추정이 일어나긴 하는지도 확인한다 — 0이면 COARSE_SLACK 이 아무것도
+    // 막고 있지 않다는 뜻이고, 그럼 이 검사가 공허하다.
+    expect(maxGap).toBeGreaterThan(0)
+    // 반대 방향(과대추정, gap < 0)은 실패 조건이 아니다. setupScore 의 conflict 항이
+    // 단조가 아니라 신호가 빠지면 점수가 오르는 경우를 구성할 수는 있지만, 이 픽스처
+    // 에서도 실데이터 10계열에서도 한 번도 관측되지 않았다(최소 간극이 정확히 0).
+    // 관측되더라도 안전한 방향이라 게이트는 양의 꼬리만 본다.
+    expect(minGap).toBeGreaterThanOrEqual(0)
+  })
 
   it('전 구간에서 1단계 근사가 정확 집합의 부분집합이다', () => {
     // 하네스가 보증하는 부등식(스펙 2.5)이 실제로 성립하는지 고정한다.
