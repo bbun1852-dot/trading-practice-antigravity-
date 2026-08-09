@@ -94,9 +94,12 @@ export type GradeReport = {
   direction: { correct: Direction; answered: Direction; score: number }
   execution: { score: number; notes: string[] }
   evidence: { score: number; verdict: EvidenceVerdict }
-  /** 근거 + 실행 */
+  /** 근거 + 실행. 은닉 구간을 한 톨도 읽지 않고 나온 값이다 (스펙 7.2) */
   processScore: number
-  /** 방향 + 재생 결과 */
+  /**
+   * 결과 축 = 방향 점수. 재생 결과(R·PnL)는 여기 더하지 않고 replay 로 따로 낸다 —
+   * 스케일이 다르고, 섞으면 "프로세스와 결과의 분리" 가 한쪽으로 무너진다.
+   */
   outcomeScore: number
   totalScore: number
   judgement: string
