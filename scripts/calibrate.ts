@@ -1,7 +1,9 @@
 import { getCandles } from '../src/data/fileCache'
 import { activeSignalsAt, filterActive } from '../src/quiz/lifetime'
 import { detectAll } from '../src/analysis/signals'
-import { TAGS, TAG_BY_ID, type LifetimeClass } from '../src/quiz/taxonomy'
+import { TAGS, TAG_BY_ID, signalWeight, type LifetimeClass } from '../src/quiz/taxonomy'
+import { makeQuestion } from '../src/quiz/generator'
+import { coreSignals, DEFAULT_CORE_K } from '../src/quiz/grader'
 import {
   scanForSetups, mergeCandidates, setupScore, difficultyOf, dominantSide,
   hasGoldenCombo, GOLDEN_COMBO_BARS, GOLDEN_COMBO_BONUS,
@@ -502,5 +504,122 @@ if (densityGateOk) {
     tierFailed.length > 0 ? `난이도 계층 쏠림: ${tierFailed.join(', ')}` : '',
   ].filter(Boolean).join(' / ')
   console.log(`\n판정: FAIL — ${why}`)
+  process.exitCode = 1
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 위험 체크포인트 ③: 핵심 근거 K
+// ════════════════════════════════════════════════════════════════════════════
+//
+// 채점의 근거 축은 핵심/참고 2단이다(스펙 8.2). 감점은 상위 K개 핵심에만 걸고 나머지
+// 유효 근거는 목록으로만 보여준다 — 유효 근거가 8~15개인데 미체크 전부를 지적하면
+// "놓쳤다" 가 매 문제 10개씩 찍혀 신호가 되지 못한다.
+//
+// K 가 정해야 하는 것은 딱 하나다: **핵심이 유효 근거 전체 가중치의 몇 %를 덮는가.**
+// 너무 낮으면 정말 중요한 근거가 참고로 밀려나 감점 없이 지나가고, 너무 높으면 참고
+// 계층이 사라져 2단으로 나눈 의미가 없어진다. 목표 대역은 60~80% 다.
+//
+// **모집단은 "실제로 출제된 문제" 다.** grade() 는 makeQuestion 이 만든 Question 위에서만
+// 돌고, makeQuestion 은 근거 개수 게이트(8~15)를 통과한 자리만 문제로 낸다. 임의 결정
+// 시점(체크포인트 ①의 표본)에는 유효 근거가 2개뿐인 자리도 섞여 있어서 커버리지가
+// 구조적으로 높게 나온다 — 대조군으로만 함께 출력하고 판정에는 쓰지 않는다.
+//
+// **가중치는 인스턴스가 아니라 태그 단위로 접어서 잰다.** 실측에서 같은 id 가 여러 개
+// 동시에 살아 있는 것이 예외가 아니라 전부였다. 답안(Answer.tags)이 태그 id 의 집합인
+// 이상 채점 가능한 단위도 태그이므로, 접지 않고 재면 K 가 실제로 무엇을 덮는지에 대해
+// 계기판이 거짓말을 한다.
+
+const CORE_SHARE_MIN = 60
+const CORE_SHARE_MAX = 80
+/** 참고 계층이 통째로 빈 문제(핵심이 곧 전부)의 허용 비율 */
+const DEGENERATE_MAX = 5
+const PROBE_KS = [3, 4, 5, 6, 7, 8, 10]
+
+/** 태그 id 당 최대 가중치 인스턴스 하나로 접은 목록 (가중치 내림차순) */
+function tagWeights(active: { id: string; strength: number }[]): number[] {
+  const best = new Map<string, number>()
+  for (const s of active) {
+    const w = signalWeight(s)
+    const prev = best.get(s.id)
+    if (prev === undefined || w > prev) best.set(s.id, w)
+  }
+  return [...best.values()].sort((a, b) => b - a)
+}
+
+type CoreProbe = { share: number[]; degenerate: number }
+
+function probeK(sets: ReturnType<typeof activeSignalsAt>[], k: number): CoreProbe {
+  const share: number[] = []
+  let degenerate = 0
+  for (const active of sets) {
+    const all = tagWeights(active)
+    const total = all.reduce((a, b) => a + b, 0)
+    if (total === 0) continue
+    const core = coreSignals(active, k)
+    share.push((core.reduce((a, s) => a + signalWeight(s), 0) / total) * 100)
+    if (core.length >= all.length) degenerate++
+  }
+  return { share, degenerate }
+}
+
+// ── 모집단 수집 ─────────────────────────────────────────────────────────────
+
+const questionSets: ReturnType<typeof activeSignalsAt>[] = []
+const genericSets: ReturnType<typeof activeSignalsAt>[] = []
+
+for (const sym of SYMBOLS) {
+  for (const tf of TFS) {
+    const cs = candlesOf.get(`${sym} ${tf}`)!
+    for (const at of AT) genericSets.push(activeSignalsAt(cs, at))
+    for (const cand of scanForSetups(cs, { minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })) {
+      const q = makeQuestion(cs, sym, tf, cand)
+      if (!q) continue
+      questionSets.push(activeSignalsAt(q.candles.slice(0, q.decisionIndex + 1), q.decisionIndex))
+    }
+  }
+}
+
+function reportCoreK(label: string, sets: ReturnType<typeof activeSignalsAt>[], judge: boolean): boolean {
+  const uniq = sets.map((a) => tagWeights(a).length)
+  const ud = dist(uniq)
+  console.log(`\n=== ${label} (표본 ${sets.length}) ===`)
+  console.log(
+    `고유 태그 수: 최소 ${fmt(ud.min)} / p25 ${fmt(ud.p25)} / 중앙 ${fmt(ud.median)} / ` +
+    `p75 ${fmt(ud.p75)} / 최대 ${fmt(ud.max)}`,
+  )
+  console.log(
+    `${'K'.padStart(4)}${'p25'.padStart(9)}${'중앙'.padStart(9)}${'p75'.padStart(9)}` +
+    `${'참고소멸'.padStart(11)}   판정`,
+  )
+
+  let chosenOk = false
+  for (const k of PROBE_KS) {
+    const { share, degenerate } = probeK(sets, k)
+    const d = dist(share)
+    const degPct = (degenerate / share.length) * 100
+    const inBand = d.p25 >= CORE_SHARE_MIN && d.p75 <= CORE_SHARE_MAX
+    const degOk = degPct < DEGENERATE_MAX
+    const ok = inBand && degOk
+    if (k === DEFAULT_CORE_K) chosenOk = ok
+    const mark = k === DEFAULT_CORE_K ? ' ←기본값' : ''
+    console.log(
+      String(k).padStart(4) + `${d.p25.toFixed(1)}%`.padStart(9) + `${d.median.toFixed(1)}%`.padStart(9) +
+      `${d.p75.toFixed(1)}%`.padStart(9) + `${degPct.toFixed(1)}%`.padStart(11) +
+      `   ${judge ? (ok ? 'PASS' : 'FAIL') : '—'}${mark}`,
+    )
+  }
+  return chosenOk
+}
+
+const coreKOk = reportCoreK('실제로 출제된 문제 — grade() 가 보는 모집단', questionSets, true)
+reportCoreK('임의 결정 시점 (대조군, 판정에 쓰지 않는다)', genericSets, false)
+
+console.log(`\n=== 체크포인트 ③ 게이트 판정 ===`)
+console.log(`기준 1(커버리지): DEFAULT_CORE_K(${DEFAULT_CORE_K}) 에서 사분위 구간 p25~p75 가 전부 ${CORE_SHARE_MIN}~${CORE_SHARE_MAX}% 안.`)
+console.log(`기준 2(2단 유지): 참고 계층이 통째로 비는 문제가 ${DEGENERATE_MAX}% 미만. 참고가 없으면 2단으로 나눈 의미가 없다.`)
+if (coreKOk) {
+  console.log(`\n판정: PASS — K=${DEFAULT_CORE_K} 가 두 기준을 모두 만족한다.`)
+} else {
+  console.log(`\n판정: FAIL — K=${DEFAULT_CORE_K} 가 기준을 벗어난다. 위 표에서 PASS 인 K 로 grader.ts 의 DEFAULT_CORE_K 를 바꿔야 한다.`)
   process.exitCode = 1
 }
