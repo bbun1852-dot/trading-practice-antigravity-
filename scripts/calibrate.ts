@@ -4,6 +4,7 @@ import { detectAll } from '../src/analysis/signals'
 import { TAGS, TAG_BY_ID, type LifetimeClass } from '../src/quiz/taxonomy'
 import {
   scanForSetups, mergeCandidates, setupScore, difficultyOf, dominantSide,
+  hasGoldenCombo, GOLDEN_COMBO_BARS, GOLDEN_COMBO_BONUS,
   WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW, COARSE_SLACK,
 } from '../src/quiz/scanner'
 import type { SetupCandidate } from '../src/quiz/types'
@@ -417,6 +418,57 @@ for (const d of ['easy', 'medium', 'hard']) {
     `   ${tierOk ? 'PASS' : 'FAIL'}`,
   )
 }
+
+// ── 골든 콤보 발동 빈도 ──────────────────────────────────────────────────────
+//
+// 가산 +2 가 의미를 가지려면 드물어야 한다. 매 봉 붙으면 특별할 것이 없어 그냥
+// 배점 인플레이션이고, 한 번도 안 붙으면 죽은 코드다. 배점표(taxonomy 의 WEIGHT)나
+// GOLDEN_COMBO_BARS 를 건드리면 이 수치를 다시 봐야 한다.
+//
+// 게이트가 아니라 계기판이다 — "이 정도면 드문가" 는 사람이 판단할 문제라 임계값을
+// 임의로 박지 않는다.
+
+console.log(`\n=== 골든 콤보 발동 빈도 (같은 방향 스윕+오더블록, ${GOLDEN_COMBO_BARS}봉 이내, +${GOLDEN_COMBO_BONUS}점) ===`)
+console.log(
+  '계열'.padEnd(14) + '전체봉'.padStart(8) + '발동'.padStart(7) + '비율'.padStart(8) +
+  '후보'.padStart(7) + '발동'.padStart(6) + '비율'.padStart(8),
+)
+
+let comboBarsAll = 0
+let comboBarsHit = 0
+let comboCandAll = 0
+let comboCandHit = 0
+
+for (const s of dseries) {
+  const cs = candlesOf.get(s.label)!
+  let barHit = 0
+  let barN = 0
+  for (let i = WARMUP; i < cs.length; i++) {
+    barN++
+    if (hasGoldenCombo(activeSignalsAt(cs, i))) barHit++
+  }
+  const cand = reference(s.rows, DEFAULT_MIN_SCORE)
+  const candHit = cand.filter((c) => hasGoldenCombo(activeSignalsAt(cs, c.barIndex))).length
+
+  comboBarsAll += barN
+  comboBarsHit += barHit
+  comboCandAll += cand.length
+  comboCandHit += candHit
+
+  console.log(
+    s.label.padEnd(14) + String(barN).padStart(8) + String(barHit).padStart(7) +
+    `${((barHit / barN) * 100).toFixed(1)}%`.padStart(8) +
+    String(cand.length).padStart(7) + String(candHit).padStart(6) +
+    `${cand.length ? ((candHit / cand.length) * 100).toFixed(1) : '0.0'}%`.padStart(8),
+  )
+}
+console.log('─'.repeat(58))
+console.log(
+  '전 계열'.padEnd(14) + String(comboBarsAll).padStart(8) + String(comboBarsHit).padStart(7) +
+  `${((comboBarsHit / comboBarsAll) * 100).toFixed(1)}%`.padStart(8) +
+  String(comboCandAll).padStart(7) + String(comboCandHit).padStart(6) +
+  `${((comboCandHit / comboCandAll) * 100).toFixed(1)}%`.padStart(8),
+)
 
 // ── 판정 ────────────────────────────────────────────────────────────────────
 

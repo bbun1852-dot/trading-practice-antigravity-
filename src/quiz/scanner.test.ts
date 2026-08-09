@@ -62,9 +62,9 @@ describe('setupScore', () => {
 })
 
 describe('골든 콤보 — 유동성을 흡수한 오더블록', () => {
-  it('같은 방향의 스윕과 오더블록이 붙어 있으면 가산한다', () => {
+  it('같은 봉에서 같은 방향의 스윕과 오더블록이 나면 가산한다', () => {
     // 스윕 4 + 오더블록 3 = 7, kind 1종(smc) → diversity 2, 상충 0, 보너스 +2 → 11
-    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 102)]
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 100)]
     expect(hasGoldenCombo(s)).toBe(true)
     expect(setupScore(s)).toBe(7 + 2 - 0 + GOLDEN_COMBO_BONUS)
   })
@@ -94,6 +94,14 @@ describe('골든 콤보 — 유동성을 흡수한 오더블록', () => {
       sig('ob_bull_support', 'bullish', 1, 100 + GOLDEN_COMBO_BARS),
     ]
     expect(hasGoldenCombo(s)).toBe(true)
+  })
+
+  it('한 봉만 어긋나도 가산하지 않는다 — "동시에" 는 같은 봉을 뜻한다', () => {
+    // 간격을 3봉까지 허용했더니 후보의 46.8%에 붙었다(실측). 최상위 지표가 절반에
+    // 붙으면 배점 인플레이션이라, 노트 원문의 "동시에" 를 문자 그대로 같은 봉으로 읽는다.
+    expect(GOLDEN_COMBO_BARS).toBe(0)
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 101)]
+    expect(hasGoldenCombo(s)).toBe(false)
   })
 
   it('오더블록만 있으면 가산하지 않는다', () => {
