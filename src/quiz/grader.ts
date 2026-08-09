@@ -278,7 +278,7 @@ function gradeExecution(q: Question, a: Answer): ExecutionResult {
  */
 export function gradeEvidence(
   active: ActiveSignal[], tags: string[], coreK: number,
-): { score: number; verdict: EvidenceVerdict } {
+): { score: number; coreCount: number; verdict: EvidenceVerdict } {
   const weights = weightByTag(active)
   const checked = new Set(tags)                 // 같은 태그를 두 번 체크해도 한 번이다
   const core = coreSignals(active, coreK)
@@ -303,7 +303,8 @@ export function gradeEvidence(
   const penalty = falseClaims.reduce((acc, t) => acc + falseClaimPenalty(t), 0)
   const score = clamp(Math.round(EVIDENCE_MAX * coverage - penalty), 0, EVIDENCE_MAX)
 
-  return { score, verdict: { hits, coreMisses, reference, falseClaims } }
+  // coreCount 를 함께 낸다 — grade 가 coreSignals 를 한 번 더 부르지 않도록.
+  return { score, coreCount: coreIds.size, verdict: { hits, coreMisses, reference, falseClaims } }
 }
 
 const fmtR = (r: number) => `${r >= 0 ? '+' : ''}${r.toFixed(1)}R`
@@ -398,7 +399,7 @@ export function grade(q: Question, a: Answer, opts: { coreK?: number } = {}): Gr
   const execution = gradeExecution(q, a)
   const evidence = gradeEvidence(active, a.tags, coreK)
 
-  const coreCount = coreSignals(active, coreK).length
+  const coreCount = evidence.coreCount
   const coreHitCount = coreCount - evidence.verdict.coreMisses.length
 
   const processScore = evidence.score + execution.score
@@ -425,6 +426,8 @@ export function grade(q: Question, a: Answer, opts: { coreK?: number } = {}): Gr
       a, rep, execution, evidence.score, direction.score,
       coreHitCount, coreCount, evidence.verdict.falseClaims.length,
     ),
-    replay: rep,
+    // 성립하지 않는 주문에는 재생 결과를 싣지 않는다. judge 가 손익을 말하지 않게
+    // 막아도, 리포트가 report.replay.r 을 직접 그리면 같은 거짓이 다른 경로로 나간다.
+    replay: execution.orderValid ? rep : null,
   }
 }

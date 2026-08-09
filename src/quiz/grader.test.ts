@@ -490,10 +490,10 @@ describe('grade — 프로세스와 결과의 분리', () => {
     expect(up.direction.correct).toBe('long')
     expect(down.direction.correct).toBe('short')
     expect(up.outcomeScore).not.toBe(down.outcomeScore)
-    expect(up.replay.exit).toBe('tp')
-    expect(down.replay.exit).toBe('sl')
-    expect(up.replay.r).toBeGreaterThan(0)
-    expect(down.replay.r).toBeLessThan(0)
+    expect(up.replay!.exit).toBe('tp')
+    expect(down.replay!.exit).toBe('sl')
+    expect(up.replay!.r).toBeGreaterThan(0)
+    expect(down.replay!.r).toBeLessThan(0)
   })
 
   it('답안의 손절가를 바꿔도 방향 점수는 변하지 않는다', () => {
@@ -517,13 +517,13 @@ describe('grade — 판정 문구', () => {
     expect(r.evidence.score).toBe(30)
     expect(r.execution.score).toBeLessThan(28)
     expect(r.processScore).toBeGreaterThanOrEqual(50)   // 브리프의 합계 기준이면 통과했을 값
-    expect(r.replay.exit).toBe('sl')
+    expect(r.replay!.exit).toBe('sl')
     expect(r.judgement).not.toContain('잘한 매매')
   })
 
   it('체결되지 않았으면 손익 숫자를 주장하지 않는다', () => {
     const r = grade(realQ(tailUp(60)), { direction: 'long', entry: 10, stopLoss: 9, takeProfit: 30, tags: [] })
-    expect(r.replay.filled).toBe(false)
+    expect(r.replay!.filled).toBe(false)
     expect(r.judgement).toContain('체결되지 않았습니다')
     expect(r.judgement).not.toMatch(/-?\d+(\.\d+)?R/)
   })
@@ -535,7 +535,7 @@ describe('grade — 판정 문구', () => {
     })
     expect(r.execution.score).toBe(40)
     expect(r.evidence.score).toBe(30)
-    expect(r.replay.exit).toBe('sl')
+    expect(r.replay!.exit).toBe('sl')
     expect(r.judgement).toContain('잘한 매매')
   })
 
@@ -546,7 +546,7 @@ describe('grade — 판정 문구', () => {
       tags: ['candle_hammer', 'macd_golden', 'rsi_oversold'],   // 셋 다 이 시점에 없다
     })
     expect(r.evidence.verdict.falseClaims).toHaveLength(3)
-    expect(r.replay.r).toBeGreaterThan(0)
+    expect(r.replay!.r).toBeGreaterThan(0)
     expect(r.processScore).toBeLessThan(35)
     expect(r.judgement).toContain('운입니다')
   })
@@ -623,6 +623,24 @@ describe('grade — 성립하지 않는 주문', () => {
     expect(r.judgement).toContain('성립하지 않는 주문')
     expect(r.judgement).not.toMatch(/\+\d/)
     expect(r.judgement).not.toContain('운입니다')
+  })
+
+  it('불성립 주문에는 재생 결과를 아예 싣지 않는다 — 리포트가 그릴 수 없어야 한다', () => {
+    // 판정 문구만 막으면 절반이다. 리포트가 report.replay.r 을 직접 그리면 같은 거짓이
+    // 다른 경로로 나간다. 실측: 이 답안에서 replay 는 exit 'sl' 에 r +1.0 을 돌려준다
+    // (risk 를 절댓값으로 재기 때문). null 로 두어 타입이 소비자를 막게 한다.
+    const r = grade(realQ(tailDown(60)), {
+      direction: 'long', entry: 112.91, stopLoss: 118, takeProfit: 125, tags: [],
+    })
+    expect(r.replay).toBeNull()
+  })
+
+  it('정상 주문에는 재생 결과가 실린다', () => {
+    const r = grade(realQ(tailUp(60)), {
+      direction: 'long', entry: 112.91, stopLoss: 107, takeProfit: 118, tags: [],
+    })
+    expect(r.replay).not.toBeNull()
+    expect(r.replay!.exit).toBe('tp')
   })
 
   it('정상 주문은 orderValid 가 참이다', () => {

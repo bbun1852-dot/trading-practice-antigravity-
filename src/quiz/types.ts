@@ -119,5 +119,13 @@ export type GradeReport = {
   /** applicableMax 를 100점으로 환산한 값. 진입 답안에서는 세 축의 단순 합과 같다 */
   totalScore: number
   judgement: string
-  replay: ReplayResult
+  /**
+   * 재생 결과. **주문으로 성립하지 않는 답안에서는 null 이다.**
+   *
+   * replay 의 R 환산은 risk 를 절댓값으로 재기 때문에 손절이 진입가 반대편에 있어도
+   * 숫자를 돌려준다(롱인데 손절이 위면 +1R). 그 값을 리포트에 실어 보내면 채점기가
+   * 실격시킨 주문의 이익을 소비자가 그대로 그린다. 0 으로 덮는 것도 답이 아니다 —
+   * "0R" 역시 재지 않은 것을 말하는 것이다. 아예 없애서 타입이 막게 한다.
+   */
+  replay: ReplayResult | null
 }
