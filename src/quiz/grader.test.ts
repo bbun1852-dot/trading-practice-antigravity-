@@ -52,6 +52,12 @@ const tailUp = (n: number): Candle[] =>
   Array.from({ length: n }, (_, i) => mk(112.9, 122.9, 112.4, 122.0, 100, DECISION + 1 + i))
 const tailDown = (n: number): Candle[] =>
   Array.from({ length: n }, (_, i) => mk(112.9, 113.4, 102.9, 103.8, 100, DECISION + 1 + i))
+/**
+ * 어느 쪽으로도 1.5 ATR 을 못 가는 꼬리 → 정답이 관망인 문제.
+ * 결정 봉 close 112.91, ATR 2.264 이므로 1.5 ATR ≈ 3.4. 폭을 ±0.5 로 둔다.
+ */
+const tailFlat = (n: number): Candle[] =>
+  Array.from({ length: n }, (_, i) => mk(112.9, 113.4, 112.4, 112.9, 100, DECISION + 1 + i))
 
 const realQ = (tail: Candle[]) => question([...REAL, ...tail])
 
@@ -82,6 +88,13 @@ describe('픽스처 전제', () => {
     expect(signalWeight({ id: 'ob_bull_support', strength: 1 })).toBe(3)
     expect(signalWeight({ id: 'candle_doji', strength: 1 })).toBe(2)
     expect(signalWeight({ id: 'msb_bull', strength: 1 })).toBe(2)
+  })
+
+  it('헛다리 감점의 크기가 고정돼 있다', () => {
+    // 다른 감점 단언은 전부 FALSE_CLAIM_PENALTY 로 쓰여 있어서, 이 상수를 0.7~15 사이
+    // 아무 값으로 바꿔도 테스트가 하나도 안 깨진다(산탄총 회귀 포함 — 헛다리 44개 ×
+    // 0.7 이면 여전히 30 을 넘는다). 비율은 고정돼 있는데 기준선이 떠 있는 상태였다.
+    expect(FALSE_CLAIM_PENALTY).toBe(3)
   })
 
   it('barren 창에는 유효 근거가 하나도 없고 dojiFlat 에는 둘 있다', () => {
@@ -203,9 +216,13 @@ describe('grade — 실행 축', () => {
     expect(ex({}).score).toBe(40)
   })
 
-  it('관망이면 실행을 판정하지 않고 만점으로 둔다', () => {
+  it('관망이면 실행 축을 판정 대상에서 뺀다 — 만점이 아니라 max 0 이다', () => {
+    // "감점하지 않는다" 와 "만점을 준다" 는 다른 연산이다. 만점을 주면 아무것도 재지
+    // 않은 축에서 40점이 나와, 아무 분석도 안 한 관망 답안이 절반을 넘긴다.
     const e = ex({ direction: 'flat', entry: undefined, stopLoss: undefined, takeProfit: undefined })
-    expect(e.score).toBe(40)
+    expect(e.score).toBe(0)
+    expect(e.max).toBe(0)
+    expect(e.orderValid).toBe(true)
     expect(e.notes.join(' ')).toContain('관망')
   })
 
@@ -542,6 +559,79 @@ describe('grade — 판정 문구', () => {
 })
 
 // ── 결정론 ──────────────────────────────────────────────────────────────────
+
+describe('grade — 점수 척도와 빈 관망', () => {
+  // 이 결함이 새어나간 이유가 바로 "총점을 못 박은 테스트가 하나도 없었다" 는 것이다.
+  // 아무 분석도 하지 않은 답안이 몇 점을 받는지는 이 도구의 눈금 자체이므로 고정한다.
+
+  const emptyFlat: Answer = { direction: 'flat', tags: [] }
+
+  it('진입 답안은 적용 만점이 100이고 환산이 항등이다', () => {
+    const q = realQ(tailUp(60))
+    const r = grade(q, { direction: 'long', entry: 112.91, stopLoss: 107, takeProfit: 118, tags: [] })
+    expect(r.applicableMax).toBe(100)
+    expect(r.totalScore).toBe(r.direction.score + r.execution.score + r.evidence.score)
+  })
+
+  it('관망 답안은 실행 축이 빠져 적용 만점이 60이다', () => {
+    const r = grade(realQ(tailUp(60)), emptyFlat)
+    expect(r.applicableMax).toBe(60)
+    expect(r.execution.max).toBe(0)
+    expect(r.processMax).toBe(30)
+  })
+
+  it('방향이 있는 문제에 빈 관망은 20점이다 — 예전엔 52점이었다', () => {
+    // 방향 12 + 실행 판정없음 + 근거 0 = 12/60 → 20.
+    // 예전 규칙은 재지도 않은 실행 축에 40점을 줘서 12+40+0 = 52 를 만들었다.
+    const r = grade(realQ(tailUp(60)), emptyFlat)
+    expect(r.direction.correct).not.toBe('flat')
+    expect(r.direction.score).toBe(12)
+    expect(r.evidence.score).toBe(0)
+    expect(r.totalScore).toBe(20)
+  })
+
+  it('노셋업 문제에 빈 관망은 50점이다 — 예전엔 70점이었다', () => {
+    // 방향은 맞았지만(30) 근거를 하나도 짚지 않았다(0) → 30/60 → 50.
+    // 방향만 맞히고 아무 근거도 못 대는 답안이 만점을 받아선 안 된다.
+    const q = realQ(tailFlat(60))
+    const r = grade(q, emptyFlat)
+    expect(r.direction.correct).toBe('flat')
+    expect(r.direction.score).toBe(30)
+    expect(r.totalScore).toBe(50)
+  })
+
+  it('노셋업을 근거까지 맞히면 100점에 도달한다 — 환산이 정답을 깎지 않는다', () => {
+    const q = realQ(tailFlat(60))
+    const core = coreTagsOf(q)
+    expect(core.length).toBeGreaterThan(0)
+    const r = grade(q, { direction: 'flat', tags: core })
+    expect(r.evidence.score).toBe(30)
+    expect(r.totalScore).toBe(100)
+  })
+})
+
+describe('grade — 성립하지 않는 주문', () => {
+  it('롱인데 손절가가 위면 손익을 사실로 말하지 않는다', () => {
+    // replay 의 R 환산은 |entry − stopLoss| 를 쓰므로 이런 답안에 +1R 을 돌려준다.
+    // 채점기가 실행 0점으로 실격시켜 놓고 판정 문구에서는 "+1.0R 인데 ... 운입니다" 라고
+    // 말하면, 자기가 방금 존재할 수 없다고 판정한 매매의 이익을 사실로 보고하는 것이다.
+    const r = grade(realQ(tailDown(60)), {
+      direction: 'long', entry: 112.91, stopLoss: 118, takeProfit: 125, tags: [],
+    })
+    expect(r.execution.orderValid).toBe(false)
+    expect(r.execution.score).toBe(0)
+    expect(r.judgement).toContain('성립하지 않는 주문')
+    expect(r.judgement).not.toMatch(/\+\d/)
+    expect(r.judgement).not.toContain('운입니다')
+  })
+
+  it('정상 주문은 orderValid 가 참이다', () => {
+    const r = grade(realQ(tailUp(60)), {
+      direction: 'long', entry: 112.91, stopLoss: 107, takeProfit: 118, tags: [],
+    })
+    expect(r.execution.orderValid).toBe(true)
+  })
+})
 
 describe('grade — 결정론', () => {
   it('같은 입력은 항상 같은 리포트를 낸다', () => {

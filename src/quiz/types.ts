@@ -92,15 +92,31 @@ export type EvidenceVerdict = {
 
 export type GradeReport = {
   direction: { correct: Direction; answered: Direction; score: number }
-  execution: { score: number; notes: string[] }
+  /**
+   * max 가 0이면 그 답안에서 실행 축은 **판정 대상이 아니다**(관망). 0점을 받은 것이
+   * 아니라 잴 것이 없었다는 뜻이므로, 화면에 "0/40" 으로 그리면 안 된다.
+   */
+  execution: { score: number; max: number; notes: string[]; orderValid: boolean }
   evidence: { score: number; verdict: EvidenceVerdict }
   /** 근거 + 실행. 은닉 구간을 한 톨도 읽지 않고 나온 값이다 (스펙 7.2) */
   processScore: number
+  /** 근거 + 실행의 적용 만점. 관망이면 실행 축이 빠져 30이다 */
+  processMax: number
   /**
    * 결과 축 = 방향 점수. 재생 결과(R·PnL)는 여기 더하지 않고 replay 로 따로 낸다 —
    * 스케일이 다르고, 섞으면 "프로세스와 결과의 분리" 가 한쪽으로 무너진다.
    */
   outcomeScore: number
+  /**
+   * 판정 대상이 된 축들의 만점 합. 진입 답안은 100, 관망 답안은 60(방향 30 + 근거 30)이다.
+   *
+   * **이 필드 없이 totalScore 만 보면 환산된 수를 고정 100점 만점으로 오해한다.**
+   * 관망 20점과 진입 20점은 같은 20이 아니다 — 앞은 두 축에서 60점 중 12점을 받아
+   * 환산된 값이고 뒤는 세 축에서 실제로 20점을 받은 값이다. 리포트는 반드시 이 값을
+   * 함께 그려야 한다.
+   */
+  applicableMax: number
+  /** applicableMax 를 100점으로 환산한 값. 진입 답안에서는 세 축의 단순 합과 같다 */
   totalScore: number
   judgement: string
   replay: ReplayResult

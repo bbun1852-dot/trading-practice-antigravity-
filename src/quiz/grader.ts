@@ -151,18 +151,36 @@ function gradeDirection(correct: Direction, answered: Direction): number {
  * 아래에서 candles 를 decisionIndex 까지 잘라 쓰는 것도 같은 이유다 — ATR 은 원래
  * 인과적이라 자르지 않아도 값이 같지만, 잘라 두면 실수로 미래를 읽는 코드가 들어올 수 없다.
  */
-function gradeExecution(q: Question, a: Answer): { score: number; notes: string[] } {
+type ExecutionResult = {
+  score: number
+  /** 이 답안에서 실행 축의 적용 만점. 0 이면 판정 대상이 아니다(관망) */
+  max: number
+  notes: string[]
+  /** 주문이 주문으로 성립하는가. false 면 재생 결과의 손익을 사실로 말해선 안 된다 */
+  orderValid: boolean
+}
+
+function gradeExecution(q: Question, a: Answer): ExecutionResult {
   const notes: string[] = []
 
   if (a.direction === 'flat') {
     // 실행하지 않았으니 실행을 탓할 것도 없다. 관망이 틀린 판단이었다면 그것은
     // 방향 축이 12점/30점으로 처리한다 — 같은 잘못을 두 축에서 두 번 깎지 않는다.
+    //
+    // 그렇다고 만점을 주지도 않는다. "감점하지 않는다" 와 "만점을 준다" 는 다른
+    // 연산이다. 만점을 주면 아무것도 재지 않은 축에서 40점이 나와, 아무 분석도 하지
+    // 않은 답안이 100점 만점에 52점을 받는다. 축 자체를 판정 대상에서 빼고
+    // (max 0) 총점을 적용 만점 기준으로 환산한다.
     notes.push('관망 — 실행 판정 없음')
-    return { score: EXECUTION_MAX, notes }
+    return { score: 0, max: 0, notes, orderValid: true }
   }
   if (a.entry === undefined || a.stopLoss === undefined) {
-    notes.push('진입가 또는 손절가가 없어 실행을 평가할 수 없다')
-    return { score: 0, notes }
+    notes.push(
+      a.entry === undefined
+        ? '진입가가 없어 실행을 평가할 수 없다'
+        : '손절가가 없어 실행을 평가할 수 없다',
+    )
+    return { score: 0, max: EXECUTION_MAX, notes, orderValid: false }
   }
 
   const { entry, stopLoss, takeProfit } = a
@@ -180,7 +198,7 @@ function gradeExecution(q: Question, a: Answer): { score: number; notes: string[
         ? `손절가 ${stopLoss} 가 진입가 ${entry} 아래가 아니다 — 롱 주문으로 성립하지 않는다`
         : `손절가 ${stopLoss} 가 진입가 ${entry} 위가 아니다 — 숏 주문으로 성립하지 않는다`,
     )
-    return { score: 0, notes }
+    return { score: 0, max: EXECUTION_MAX, notes, orderValid: false }
   }
 
   const visible = q.candles.slice(0, q.decisionIndex + 1)
@@ -240,7 +258,7 @@ function gradeExecution(q: Question, a: Answer): { score: number; notes: string[
     }
   }
 
-  return { score: clamp(score, 0, EXECUTION_MAX), notes }
+  return { score: clamp(score, 0, EXECUTION_MAX), max: EXECUTION_MAX, notes, orderValid: true }
 }
 
 /**
@@ -310,17 +328,33 @@ function exitPhrase(rep: ReplayResult): string {
  * 가르고, 문장에는 실제 점수와 실제 청산 사유만 적는다.
  */
 function judge(
-  a: Answer, rep: ReplayResult,
-  evidenceScore: number, executionScore: number, directionScore: number,
+  a: Answer, rep: ReplayResult, exec: ExecutionResult,
+  evidenceScore: number, directionScore: number,
   coreHitCount: number, coreCount: number, falseClaimCount: number,
 ): string {
+  const executionScore = exec.score
   const processScore = evidenceScore + executionScore
-  const ledger =
-    `프로세스 ${processScore}/${PROCESS_MAX} (근거 ${evidenceScore}/${EVIDENCE_MAX} · ` +
-    `실행 ${executionScore}/${EXECUTION_MAX}), 결과 ${directionScore}/${DIRECTION_MAX}.`
+  // 관망이면 실행 축이 판정 대상이 아니므로 원장에서도 뺀다. "실행 0/40" 이라고 적으면
+  // 재지도 않은 축에서 0점을 받은 것처럼 읽힌다.
+  const ledger = exec.max === 0
+    ? `프로세스 ${evidenceScore}/${EVIDENCE_MAX} (근거만 — 실행은 판정 대상 아님), ` +
+      `결과 ${directionScore}/${DIRECTION_MAX}.`
+    : `프로세스 ${processScore}/${PROCESS_MAX} (근거 ${evidenceScore}/${EVIDENCE_MAX} · ` +
+      `실행 ${executionScore}/${EXECUTION_MAX}), 결과 ${directionScore}/${DIRECTION_MAX}.`
 
   if (a.direction === 'flat') return `관망했으므로 체결도 손익도 없습니다. ${ledger}`
-  if (!rep.filled) return `진입가 ${a.entry} 에 가격이 닿지 않아 체결되지 않았습니다. ${ledger}`
+
+  // 주문으로 성립하지 않는 답안에는 손익을 말하지 않는다. replay 의 R 환산은 손절이
+  // 진입가 반대편에 있어도 숫자를 돌려주므로(롱인데 손절이 위면 +1R), 그 값을 사실로
+  // 옮기면 채점기가 자기가 방금 실격시킨 주문의 이익을 보고하게 된다.
+  if (!exec.orderValid) {
+    return `${exec.notes[0]}. 성립하지 않는 주문이라 손익을 따지지 않습니다. ${ledger}`
+  }
+  if (!rep.filled) {
+    return a.entry === undefined
+      ? `진입가가 없어 체결을 따질 수 없습니다. ${ledger}`
+      : `진입가 ${a.entry} 에 가격이 닿지 않아 체결되지 않았습니다. ${ledger}`
+  }
 
   const wellReasoned =
     evidenceScore >= EVIDENCE_MAX * WELL_REASONED_RATIO &&
@@ -370,15 +404,25 @@ export function grade(q: Question, a: Answer, opts: { coreK?: number } = {}): Gr
   const processScore = evidence.score + execution.score
   const outcomeScore = direction.score
 
+  // 판정 대상이 된 축들의 만점. 관망이면 실행 축이 빠져 60(방향 30 + 근거 30)이다.
+  const applicableMax = DIRECTION_MAX + EVIDENCE_MAX + execution.max
+  const raw = direction.score + execution.score + evidence.score
+  // 적용 만점을 100점으로 환산한다. 진입 답안은 applicableMax 가 100 이라 항등이고,
+  // 관망 답안만 60 기준으로 늘어난다. Math.round 로 고정해 같은 입력이 항상 같은
+  // 정수를 내게 한다 — 60 분모에서는 정수로 안 떨어지는 조합이 흔하다.
+  const totalScore = Math.round((raw / applicableMax) * 100)
+
   return {
     direction,
     execution,
     evidence,
     processScore,
+    processMax: EVIDENCE_MAX + execution.max,
     outcomeScore,
-    totalScore: direction.score + execution.score + evidence.score,
+    applicableMax,
+    totalScore,
     judgement: judge(
-      a, rep, evidence.score, execution.score, direction.score,
+      a, rep, execution, evidence.score, direction.score,
       coreHitCount, coreCount, evidence.verdict.falseClaims.length,
     ),
     replay: rep,
