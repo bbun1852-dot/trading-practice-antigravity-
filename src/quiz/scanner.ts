@@ -1,7 +1,8 @@
 import type { Candle } from '../data/types'
-import { type Signal, TIER_WEIGHT } from '../analysis/signalTypes'
+import type { Signal } from '../analysis/signalTypes'
 import { detectAll } from '../analysis/signals'
 import { filterActive, activeSignalsAt } from './lifetime'
+import { signalWeight } from './taxonomy'
 import type { SetupCandidate, Difficulty } from './types'
 
 /** 지표 워밍업에 필요한 봉 수. 이전 구간은 신호가 불완전하다 */
@@ -11,15 +12,19 @@ export const WARMUP = 120
  * 실측으로 확정한 기본 임계값 (scripts/calibrate.ts).
  *
  * 후보 밀도 게이트는 "1000봉당 15~40개" 이고, 판정은 계열별이다. 심볼 5종 × 4h/1d,
- * 창을 2026-08-01 로 고정한 1000봉에서 계열별 밀도는 24~29개, 표본외 창(2025-10-01)
- * 에서도 25~31개로 열 계열 전부 통과한다. 125 는 게이트 양쪽 경계까지의 최소 여유를
- * 최대로 만드는 값이다 (두 창 모두 여유 9). 120·130·135 도 통과하지만 여유가 더 작다.
+ * 창을 2026-08-01 로 고정한 1000봉에서 계열별 밀도는 25~29개로 열 계열 전부 통과한다.
+ * 85 는 게이트 양쪽 경계까지의 최소 여유를 최대로 만드는 값이다(여유 10).
+ * 75·80·90 도 통과하지만 여유가 더 작다(8·9·8).
+ *
+ * **2026-08-06 재확정.** 이전 값은 125 였다. 가중치 체계 개정으로 태그 배점 상한이
+ * 5 → 4 로 내려가면서 점수 분포 전체가 낮아졌고, 옛 임계값에서는 밀도가 9.5 로
+ * 떨어져 열 계열 전부 실패했다. 임계값은 배점 체계에 종속되므로 taxonomy.ts 의
+ * WEIGHT 를 건드리면 여기도 반드시 다시 재야 한다.
  *
  * 이 밀도는 "후보" 기준이지 "실제로 문제가 되는" 기준이 아니다 — generator.ts 의
- * 근거 개수 게이트(MIN_EVIDENCE~MAX_EVIDENCE)가 뒤에서 한 번 더 거른다. 실측상
- * 후보의 약 58%만 그 대역을 통과하므로, 실효 밀도는 대략 1000봉당 14~17개다.
+ * 근거 개수 게이트(MIN_EVIDENCE~MAX_EVIDENCE)가 뒤에서 한 번 더 거른다.
  */
-export const DEFAULT_MIN_SCORE = 125
+export const DEFAULT_MIN_SCORE = 85
 
 /** 후보 사이 최소 간격. 같은 국면을 여러 문제로 반복해서 내지 않기 위한 것이다 */
 export const DEFAULT_MERGE_WINDOW = 20
@@ -43,11 +48,53 @@ export const DEFAULT_MERGE_WINDOW = 20
  */
 export const COARSE_SLACK = 60
 
+const SWEEP_IDS = new Set(['liq_sweep_low', 'liq_sweep_high'])
+const ORDER_BLOCK_IDS = new Set(['ob_bull_support', 'ob_bear_resistance'])
+
+/** 스윕 봉과 오더블록 봉이 이만큼 이내로 붙어 있어야 "동시에 형성됐다"고 본다 */
+export const GOLDEN_COMBO_BARS = 3
+/** 골든 콤보 가산. 4(스윕) + 3(오더블록) + 2 = 9점이 되게 하는 값이다 */
+export const GOLDEN_COMBO_BONUS = 2
+
+/**
+ * 골든 콤보 — 유동성을 흡수한 오더블록.
+ *
+ * 세력이 아래쪽 손절 물량을 받아먹고(스윕) 그 자리에서 바로 반등 캔들로 오더블록을
+ * 만들었다면, 가격을 다시 그 아래로 내릴 이유가 없다. 단독 오더블록이 "뒤에 남은
+ * 유동성 때문에 뚫릴 수 있는 자리" 인 것과 정반대다.
+ *
+ * 판정은 셋을 모두 요구한다: 같은 방향, 스윕과 오더블록이 둘 다 유효, 두 봉이
+ * GOLDEN_COMBO_BARS 이내. 방향을 안 보면 저점 스윕과 약세 오더블록처럼 서로 반대인
+ * 조합에도 가산이 붙는다.
+ *
+ * 가산은 조합이 몇 쌍이든 문제당 한 번만 준다. 쌍마다 주면 오더블록이 여러 개인
+ * 구간에서 점수가 폭주한다.
+ */
+export function hasGoldenCombo(signals: Signal[]): boolean {
+  const sweeps = signals.filter((s) => SWEEP_IDS.has(s.id))
+  if (sweeps.length === 0) return false
+  const blocks = signals.filter((s) => ORDER_BLOCK_IDS.has(s.id))
+  if (blocks.length === 0) return false
+
+  for (const sw of sweeps) {
+    for (const ob of blocks) {
+      if (sw.side !== ob.side) continue
+      if (Math.abs(sw.barIndex - ob.barIndex) <= GOLDEN_COMBO_BARS) return true
+    }
+  }
+  return false
+}
+
 /**
  * 근거 묶음의 셋업 점수.
  *
- * base(티어 가중 × 강도) + diversity(근거 종류 수 × 2) − conflict(상충 쌍 × 3).
+ * base(태그 배점 × 강도) + diversity(근거 종류 수 × 2) − conflict(상충 쌍 × 3)
+ * + 골든 콤보 가산.
  * 중립 신호는 base·diversity 에는 들어가지만 상충 계산에는 끼지 않는다.
+ *
+ * base 를 TIER_WEIGHT 가 아니라 taxonomy 의 태그 배점에서 가져온다 — 개정된 가중치
+ * 체계에서 유동성 청산(4점)과 오더블록(3점)이 갈라졌는데 감지기는 둘 다 tier 1 로
+ * 배출하기 때문이다. 자세한 이유는 taxonomy.ts 의 WEIGHT 주석에 있다.
  */
 export function setupScore(signals: Signal[]): number {
   let base = 0
@@ -55,12 +102,13 @@ export function setupScore(signals: Signal[]): number {
   let bear = 0
   const kinds = new Set<string>()
   for (const s of signals) {
-    base += TIER_WEIGHT[s.tier] * s.strength
+    base += signalWeight(s)
     kinds.add(s.kind)
     if (s.side === 'bullish') bull++
     else if (s.side === 'bearish') bear++
   }
-  return base + 2 * kinds.size - 3 * Math.min(bull, bear)
+  const bonus = hasGoldenCombo(signals) ? GOLDEN_COMBO_BONUS : 0
+  return base + 2 * kinds.size - 3 * Math.min(bull, bear) + bonus
 }
 
 /** 유효 근거의 가중 합이 큰 쪽. 개수가 아니라 가중치로 정한다 */
@@ -68,7 +116,7 @@ export function dominantSide(signals: Signal[]): 'bullish' | 'bearish' | 'neutra
   let bull = 0
   let bear = 0
   for (const s of signals) {
-    const w = TIER_WEIGHT[s.tier] * s.strength
+    const w = signalWeight(s)
     if (s.side === 'bullish') bull += w
     else if (s.side === 'bearish') bear += w
   }
@@ -84,7 +132,7 @@ function agreementRatio(signals: Signal[]): number | null {
   let bull = 0
   let bear = 0
   for (const s of signals) {
-    const w = TIER_WEIGHT[s.tier] * s.strength
+    const w = signalWeight(s)
     if (s.side === 'bullish') bull += w
     else if (s.side === 'bearish') bear += w
   }

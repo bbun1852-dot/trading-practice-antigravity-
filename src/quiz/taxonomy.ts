@@ -11,10 +11,53 @@ export type LifetimeClass =
 export type TagDef = {
   id: string
   label: string
+  /** 감지기가 배출한 tier 값 그대로. 채점 배점은 tier 가 아니라 weight 가 정한다 */
   tier: Tier
   kind: SignalKind
   confidence: Confidence
   lifetime: LifetimeClass
+  /** 채점 배점. 아래 WEIGHT 표가 원천이다 */
+  weight: number
+}
+
+// ── 배점: 사용자의 트레이딩 노트 가중치 체계 (2026-08-06 개정) ────────────────
+//
+// 배점 권위가 `signalTypes.ts` 의 TIER_WEIGHT 에서 이 표로 옮겨왔다. 이유는 하나다 —
+// 개정된 체계에서 유동성 청산은 4점이고 오더블록은 3점인데, 감지기는 둘 다
+// `tier: 1` 로 배출한다. tier 하나로는 두 배점을 구분할 수 없고, tier 를 고치려면
+// Part 1 감지기를 건드려야 한다(동결 영역). 태그 단위 배점으로 옮기면 감지기를
+// 한 줄도 안 건드리고 표를 그대로 옮길 수 있다.
+//
+// 오더블록이 5점에서 3점으로 내려온 것이 이번 개정의 핵심이다. 뒤에 미청산 물량이
+// 남은 오더블록은 세력이 지켜주지 않고 뚫어버린 뒤 아래 유동성을 먹고 올리는 자리라,
+// 단독 신뢰도가 그만큼 높지 않다. 대신 유동성을 털어내며 만들어진 오더블록에는
+// 골든 콤보 가산(+2)이 붙어 4+3+2 = 9점이 된다 (scanner.ts 의 GOLDEN_COMBO_BONUS).
+const WEIGHT: Record<string, number> = {
+  // Tier 1 (4점) — 시장 구조 & 핵심
+  liq_sweep_low: 4, liq_sweep_high: 4,
+  fvg_bull: 4, fvg_bear: 4,
+  vol_breakout_confirm: 4, vol_breakout_weak: 4, vol_climax: 4,
+
+  // Tier 2 (3점) — 수급 & 기하학적 분석
+  ob_bull_support: 3, ob_bear_resistance: 3,
+  obv_divergence: 3,
+  trend_up_structure: 3, trend_down_structure: 3, trend_range: 3,
+  bb_squeeze: 3, bb_break_upper: 3, bb_break_lower: 3,
+  // 이동평균은 크로스와 배열을 나눈다. 크로스는 구조 변화가 끝난 뒤에 뒤늦게 뜨는
+  // 후행 신호지만, 배열은 현재 추세의 밀도와 관성을 보여주므로 신뢰도가 더 높다.
+  ma_aligned_bull: 3, ma_aligned_bear: 3,
+
+  // Tier 3 (2점) — 모멘텀 & 캔들 신호
+  msb_bull: 2, msb_bear: 2,
+  ma_golden_cross: 2, ma_dead_cross: 2,
+  macd_golden: 2, macd_dead: 2, macd_zero_break: 2, macd_divergence: 2,
+  rsi_overbought: 2, rsi_oversold: 2, rsi_50_break: 2,
+  rsi_bull_div: 2, rsi_bear_div: 2, rsi_hidden_div: 2,
+  candle_hammer: 2, candle_inv_hammer: 2, candle_shooting_star: 2, candle_doji: 2,
+  candle_bull_engulf: 2, candle_bear_engulf: 2, candle_bull_harami: 2,
+  candle_bear_harami: 2, candle_morning_star: 2, candle_evening_star: 2,
+  candle_three_soldiers: 2, candle_three_crows: 2, candle_tri_star: 2,
+  tweezer_top: 2, tweezer_bottom: 2, candle_long_wick: 2, candle_inside_bar: 2,
 }
 
 // ── 수명 값: Task 5에서 scripts/calibrate.ts 로 실측 확정 ──────────────────────
@@ -51,7 +94,13 @@ const zone = (maxBars: number, invalidateOn: 'touch' | 'close_through'): Lifetim
 const t = (
   id: string, label: string, tier: Tier, kind: SignalKind, lifetime: LifetimeClass,
   confidence: Confidence = 'A',
-): TagDef => ({ id, label, tier, kind, confidence, lifetime })
+): TagDef => {
+  const weight = WEIGHT[id]
+  // 모듈 로드 시점에 터뜨린다. 배점 없는 태그를 0점으로 흘려보내면 사용자가 정확히
+  // 짚은 근거가 조용히 무득점 처리되고, 테스트가 돌기 전에는 아무도 모른다.
+  if (weight === undefined) throw new Error(`taxonomy: '${id}' 에 배점(WEIGHT)이 없다`)
+  return { id, label, tier, kind, confidence, lifetime, weight }
+}
 
 /**
  * 감지기가 실제로 배출하는 태그만 올린다. 감지기 없는 태그를 노출하면
@@ -128,3 +177,13 @@ export const TAGS: TagDef[] = [
 ]
 
 export const TAG_BY_ID = new Map(TAGS.map((d) => [d.id, d]))
+
+/**
+ * 신호 하나의 채점 무게 = 태그 배점 × 강도.
+ *
+ * taxonomy 에 없는 id 는 0 이다. 그런 신호는 lifetime 필터가 이미 걸러내므로
+ * 채점 경로에 도달하지 않지만, 0 을 돌려주는 편이 조용히 NaN 을 퍼뜨리는 것보다 낫다.
+ */
+export function signalWeight(s: { id: string; strength: number }): number {
+  return (TAG_BY_ID.get(s.id)?.weight ?? 0) * s.strength
+}

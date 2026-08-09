@@ -1,30 +1,46 @@
 import { describe, it, expect } from 'vitest'
 import {
   setupScore, dominantSide, difficultyOf, mergeCandidates, scanForSetups,
+  hasGoldenCombo, GOLDEN_COMBO_BARS, GOLDEN_COMBO_BONUS,
   WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW, COARSE_SLACK,
 } from './scanner'
+import { TAG_BY_ID, signalWeight } from './taxonomy'
 import { activeSignalsAt, filterActive } from './lifetime'
 import { detectAll } from '../analysis/signals'
 import type { Signal } from '../analysis/signalTypes'
 import type { SetupCandidate } from './types'
 import { synthCandles } from '../analysis/fixtures'
 
+/**
+ * 실제 taxonomy 태그로만 신호를 만든다.
+ *
+ * 배점이 태그 id 에서 오기 때문에(taxonomy.ts 의 WEIGHT) 가짜 id 를 쓰면 무게가 0 이
+ * 되어 테스트가 조용히 무의미해진다. 없는 id 는 여기서 즉시 터뜨린다.
+ * tier·kind 도 taxonomy 에서 가져와 테스트가 실제 태그 메타데이터와 어긋나지 않게 한다.
+ */
 const sig = (
-  id: string, tier: 1 | 2 | 3 | 4, kind: Signal['kind'], side: Signal['side'],
-  strength: 1 | 2 | 3 = 1, barIndex = 10,
-): Signal => ({ id, tier, kind, side, barIndex, confidence: 'A', strength, evidence: '' })
+  id: string, side: Signal['side'], strength: 1 | 2 | 3 = 1, barIndex = 10,
+): Signal => {
+  const def = TAG_BY_ID.get(id)
+  if (!def) throw new Error(`테스트가 taxonomy 에 없는 태그를 쓴다: ${id}`)
+  return {
+    id, tier: def.tier, kind: def.kind, side, barIndex,
+    confidence: 'A', strength, evidence: '',
+  }
+}
 
 describe('setupScore', () => {
-  it('base = Σ(tierWeight × strength)', () => {
-    // Tier1×2 = 10, Tier4×1 = 2 → base 12, kind 2종 → diversity 4, 상충 없음
-    const s = [sig('a', 1, 'smc', 'bullish', 2), sig('b', 4, 'candle', 'bullish', 1)]
-    expect(setupScore(s)).toBe(12 + 4 - 0)
+  it('base = Σ(태그 배점 × 강도)', () => {
+    // liq_sweep_low 4×2 = 8, candle_hammer 2×1 = 2 → base 10
+    // kind 2종(smc·candle) → diversity 4, 상충 없음
+    const s = [sig('liq_sweep_low', 'bullish', 2), sig('candle_hammer', 'bullish')]
+    expect(setupScore(s)).toBe(10 + 4 - 0)
   })
 
   it('상충하면 감점한다', () => {
-    // Tier1×1 각각 = 10, kind 1종 → diversity 2, min(1,1)=1 → conflict 3
-    const s = [sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bearish')]
-    expect(setupScore(s)).toBe(10 + 2 - 3)
+    // 스윕 4점씩 = 8, kind 1종(smc) → diversity 2, min(1,1)=1 → conflict 3
+    const s = [sig('liq_sweep_low', 'bullish'), sig('liq_sweep_high', 'bearish')]
+    expect(setupScore(s)).toBe(8 + 2 - 3)
   })
 
   it('신호가 없으면 0이다', () => {
@@ -32,28 +48,95 @@ describe('setupScore', () => {
   })
 
   it('중립 신호는 base·diversity 에는 들어가지만 상충 감점에는 끼지 않는다', () => {
-    // Tier3×1 = 3, Tier1×1 = 5 → base 8, kind 2종 → 4, 중립은 bull/bear 어느 쪽도 아니므로 감점 0
-    const s = [sig('n', 3, 'structure', 'neutral'), sig('a', 1, 'smc', 'bullish')]
-    expect(setupScore(s)).toBe(8 + 4 - 0)
+    // trend_range 3 + liq_sweep_low 4 = 7, kind 2종 → 4, 중립은 어느 쪽도 아니라 감점 0
+    const s = [sig('trend_range', 'neutral'), sig('liq_sweep_low', 'bullish')]
+    expect(setupScore(s)).toBe(7 + 4 - 0)
+  })
+
+  it('오더블록이 유동성 청산보다 낮게 매겨진다', () => {
+    // 개정된 가중치의 핵심 — 단독 오더블록(3점)은 뒤에 남은 유동성 때문에 뚫릴 수
+    // 있는 자리라 스윕(4점)보다 신뢰도가 낮다.
+    expect(setupScore([sig('ob_bull_support', 'bullish')]))
+      .toBeLessThan(setupScore([sig('liq_sweep_low', 'bullish')]))
+  })
+})
+
+describe('골든 콤보 — 유동성을 흡수한 오더블록', () => {
+  it('같은 방향의 스윕과 오더블록이 붙어 있으면 가산한다', () => {
+    // 스윕 4 + 오더블록 3 = 7, kind 1종(smc) → diversity 2, 상충 0, 보너스 +2 → 11
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 102)]
+    expect(hasGoldenCombo(s)).toBe(true)
+    expect(setupScore(s)).toBe(7 + 2 - 0 + GOLDEN_COMBO_BONUS)
+  })
+
+  it('스윕 4 + 오더블록 3 + 가산 2 = 9점이 된다', () => {
+    // 사용자 노트의 Case B — 세력이 목적을 달성한 최상위 타점
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 100)]
+    const base = signalWeight(s[0]) + signalWeight(s[1])
+    expect(base + GOLDEN_COMBO_BONUS).toBe(9)
+  })
+
+  it('방향이 다르면 가산하지 않는다', () => {
+    // 저점 스윕(강세)과 약세 오더블록은 같은 이야기가 아니다
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bear_resistance', 'bearish', 1, 101)]
+    expect(hasGoldenCombo(s)).toBe(false)
+  })
+
+  it('봉이 멀면 가산하지 않는다', () => {
+    const far = GOLDEN_COMBO_BARS + 1
+    const s = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 100 + far)]
+    expect(hasGoldenCombo(s)).toBe(false)
+  })
+
+  it('경계값: 정확히 GOLDEN_COMBO_BARS 만큼 떨어져 있으면 가산한다', () => {
+    const s = [
+      sig('liq_sweep_low', 'bullish', 1, 100),
+      sig('ob_bull_support', 'bullish', 1, 100 + GOLDEN_COMBO_BARS),
+    ]
+    expect(hasGoldenCombo(s)).toBe(true)
+  })
+
+  it('오더블록만 있으면 가산하지 않는다', () => {
+    expect(hasGoldenCombo([sig('ob_bull_support', 'bullish')])).toBe(false)
+  })
+
+  it('스윕만 있으면 가산하지 않는다', () => {
+    expect(hasGoldenCombo([sig('liq_sweep_low', 'bullish')])).toBe(false)
+  })
+
+  it('조합이 여러 쌍이어도 가산은 한 번뿐이다', () => {
+    // 쌍마다 주면 오더블록이 여러 개인 구간에서 점수가 폭주한다
+    const many = [
+      sig('liq_sweep_low', 'bullish', 1, 100),
+      sig('ob_bull_support', 'bullish', 1, 100),
+      sig('ob_bull_support', 'bullish', 1, 101),
+      sig('ob_bull_support', 'bullish', 1, 102),
+    ]
+    const one = [sig('liq_sweep_low', 'bullish', 1, 100), sig('ob_bull_support', 'bullish', 1, 100)]
+    const extraWeight = signalWeight(many[2]) + signalWeight(many[3])
+    // 오더블록 2개가 더 붙은 만큼만 늘고, 보너스는 그대로 1회
+    expect(setupScore(many)).toBe(setupScore(one) + extraWeight)
   })
 })
 
 describe('dominantSide', () => {
   it('가중 합이 큰 쪽을 낸다', () => {
-    const s = [sig('a', 1, 'smc', 'bullish'), sig('b', 4, 'candle', 'bearish')]
+    // 스윕 4 vs 캔들 2
+    const s = [sig('liq_sweep_low', 'bullish'), sig('candle_shooting_star', 'bearish')]
     expect(dominantSide(s)).toBe('bullish')
   })
 
   it('동률이면 neutral', () => {
-    const s = [sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bearish')]
+    const s = [sig('liq_sweep_low', 'bullish'), sig('liq_sweep_high', 'bearish')]
     expect(dominantSide(s)).toBe('neutral')
   })
 
   it('개수가 아니라 가중치로 정한다 — 수가 적어도 무거우면 이긴다', () => {
-    // bullish 1개 = 5×3 = 15, bearish 3개 = 2×1 × 3 = 6
+    // bullish 1개 = 4×3 = 12, bearish 3개 = 2×1 × 3 = 6
     const s = [
-      sig('a', 1, 'smc', 'bullish', 3),
-      sig('b', 4, 'candle', 'bearish'), sig('c', 4, 'candle', 'bearish'), sig('d', 4, 'candle', 'bearish'),
+      sig('liq_sweep_low', 'bullish', 3),
+      sig('candle_shooting_star', 'bearish'), sig('candle_bear_engulf', 'bearish'),
+      sig('candle_bear_harami', 'bearish'),
     ]
     expect(dominantSide(s)).toBe('bullish')
   })
@@ -63,56 +146,62 @@ describe('dominantSide', () => {
   })
 
   it('전부 중립이면 neutral', () => {
-    expect(dominantSide([sig('a', 3, 'structure', 'neutral'), sig('b', 3, 'structure', 'neutral')])).toBe('neutral')
+    expect(dominantSide([sig('trend_range', 'neutral'), sig('bb_squeeze', 'neutral')])).toBe('neutral')
   })
 })
 
 describe('difficultyOf', () => {
+  const BULL_CANDLES = [
+    'candle_hammer', 'candle_inv_hammer', 'candle_bull_engulf',
+    'candle_bull_harami', 'candle_morning_star',
+  ]
+  const BEAR_CANDLES = ['candle_shooting_star', 'candle_bear_engulf', 'candle_bear_harami']
+
   it('반대편이 없으면 easy', () => {
-    const s = [1, 2, 3, 4].map((i) => sig(`a${i}`, 4, 'candle', 'bullish'))
+    const s = BULL_CANDLES.slice(0, 4).map((id) => sig(id, 'bullish'))
     expect(difficultyOf(s)).toBe('easy')
   })
 
   it('가중치가 팽팽하면 hard', () => {
-    const s = [sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bearish')]
+    const s = [sig('liq_sweep_low', 'bullish'), sig('liq_sweep_high', 'bearish')]
     expect(difficultyOf(s)).toBe('hard')
   })
 
   it('우세한 쪽이 3배 이상이면 easy', () => {
-    // bullish 4×(2×1)=8, bearish 1×(2×1)=2 → 쏠림도 0.80 ≥ 0.75
-    const s = [...[1, 2, 3, 4].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')), sig('b', 4, 'candle', 'bearish')]
+    // bullish 4×2=8, bearish 1×2=2 → 쏠림도 0.80 ≥ 0.75
+    const s = [...BULL_CANDLES.slice(0, 4).map((id) => sig(id, 'bullish')), sig(BEAR_CANDLES[0], 'bearish')]
     expect(difficultyOf(s)).toBe('easy')
   })
 
   it('우세하지만 3배에는 못 미치면 medium', () => {
     // bullish 5×2=10, bearish 2×2=4 → 쏠림도 0.714 (0.62 이상 0.75 미만)
     const s = [
-      ...[1, 2, 3, 4, 5].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')),
-      sig('b1', 4, 'candle', 'bearish'), sig('b2', 4, 'candle', 'bearish'),
+      ...BULL_CANDLES.map((id) => sig(id, 'bullish')),
+      ...BEAR_CANDLES.slice(0, 2).map((id) => sig(id, 'bearish')),
     ]
     expect(difficultyOf(s)).toBe('medium')
   })
 
   it('개수가 아니라 가중치로 나눈다 — 수는 밀려도 무거우면 쏠린 것이다', () => {
-    // bullish 1×(5×3)=15, bearish 3×(2×1)=6 → 쏠림도 0.714 → medium.
+    // bullish 1×(4×3)=12, bearish 3×(2×1)=6 → 쏠림도 0.667 → medium.
     // 개수로만 보면 1:3 이라 '반대가 우세' 로 읽히지만 무게로는 오히려 bullish 가 앞선다.
     const s = [
-      sig('a', 1, 'smc', 'bullish', 3),
-      sig('b1', 4, 'candle', 'bearish'), sig('b2', 4, 'candle', 'bearish'), sig('b3', 4, 'candle', 'bearish'),
+      sig('liq_sweep_low', 'bullish', 3),
+      ...BEAR_CANDLES.map((id) => sig(id, 'bearish')),
     ]
     expect(difficultyOf(s)).toBe('medium')
   })
 
   it('한 방향뿐이면 개수가 적어도 easy — 반대 근거가 없으니 헷갈릴 것이 없다', () => {
     // 개수 기준(4개 이상)이었다면 medium 이었다. 가중치 기준에서는 상충이 0이면 easy 다.
-    expect(difficultyOf([sig('a', 1, 'smc', 'bullish'), sig('b', 1, 'smc', 'bullish')])).toBe('easy')
+    expect(difficultyOf([sig('liq_sweep_low', 'bullish'), sig('fvg_bull', 'bullish')])).toBe('easy')
   })
 
   it('중립 신호는 쏠림도를 흐리지 않는다', () => {
     // 중립을 분모에 넣으면 쏠림도가 내려가 난이도가 뒤바뀐다. 방향 근거만으로 잰다.
     const s = [
-      sig('a', 1, 'smc', 'bullish'),
-      ...[1, 2, 3].map((i) => sig(`n${i}`, 3, 'structure', 'neutral')),
+      sig('liq_sweep_low', 'bullish'),
+      sig('trend_range', 'neutral'), sig('bb_squeeze', 'neutral'), sig('candle_doji', 'neutral'),
     ]
     expect(difficultyOf(s)).toBe('easy')
   })
@@ -122,21 +211,25 @@ describe('difficultyOf', () => {
   })
 
   it('전부 중립이면 hard — 방향 근거가 0개인 것은 근거가 없는 것과 같다', () => {
-    const s = [1, 2, 3, 4, 5].map((i) => sig(`n${i}`, 3, 'structure', 'neutral'))
+    const s = ['trend_range', 'bb_squeeze', 'candle_doji', 'candle_inside_bar', 'candle_tri_star']
+      .map((id) => sig(id, 'neutral'))
     expect(difficultyOf(s)).toBe('hard')
   })
 
   it('경계값: 쏠림도 0.75 는 easy, 0.62 는 medium', () => {
     // 정확히 0.75 → easy (>= 이므로). bullish 3×2=6, bearish 1×2=2 → 6/8 = 0.75
     expect(difficultyOf([
-      ...[1, 2, 3].map((i) => sig(`a${i}`, 4, 'candle', 'bullish')), sig('b', 4, 'candle', 'bearish'),
+      ...BULL_CANDLES.slice(0, 3).map((id) => sig(id, 'bullish')), sig(BEAR_CANDLES[0], 'bearish'),
     ])).toBe('easy')
     // 정확히 0.62 → medium (hard 는 미만이므로). bullish 31, bearish 19 → 31/50 = 0.62
     expect(difficultyOf([
-      sig('a', 3, 'structure', 'bullish', 3),                                  // 9
-      sig('a2', 4, 'candle', 'bullish', 3), sig('a3', 4, 'ma', 'bullish', 3),  // 6+6 = 12
-      sig('a4', 4, 'momentum', 'bullish', 3), sig('a5', 4, 'volume', 'bullish', 2), // 6+4 = 10
-      sig('b', 1, 'smc', 'bearish', 3), sig('b2', 4, 'candle', 'bearish', 2),  // 15+4 = 19
+      sig('liq_sweep_low', 'bullish', 3),      // 4×3 = 12
+      sig('ob_bull_support', 'bullish', 3),    // 3×3 =  9
+      sig('ma_aligned_bull', 'bullish', 2),    // 3×2 =  6
+      sig('candle_hammer', 'bullish', 2),      // 2×2 =  4  → 31
+      sig('liq_sweep_high', 'bearish', 3),     // 4×3 = 12
+      sig('ob_bear_resistance', 'bearish', 1), // 3×1 =  3
+      sig('candle_shooting_star', 'bearish', 2), // 2×2 = 4  → 19
     ])).toBe('medium')
   })
 })
