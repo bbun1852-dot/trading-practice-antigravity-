@@ -391,6 +391,16 @@ describe('grade — 근거 축 (실제 창)', () => {
     const r = grade(q, { direction: 'flat', tags: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'] })
     expect(r.evidence.score).toBe(0)
   })
+
+  it('전 태그를 다 찍으면 0점이다 — 산탄총이 이기는 전략이 되면 안 된다', () => {
+    // 핵심은 전부 덮이지만(커버리지 1) 유효하지 않은 40여 종이 전부 헛다리가 된다
+    const rq = realQ(tailUp(60))
+    const all = [...TAG_BY_ID.keys()]
+    const r = grade(rq, { direction: 'flat', tags: all })
+    expect(r.evidence.verdict.coreMisses).toEqual([])
+    expect(r.evidence.verdict.falseClaims.length).toBeGreaterThan(30)
+    expect(r.evidence.score).toBe(0)
+  })
 })
 
 // ── confidence 차등 (스펙 6.7) ──────────────────────────────────────────────
@@ -433,8 +443,10 @@ describe('헛다리 감점의 confidence 차등 — A 100% / B 50% / C 0%', () =
 // ── 프로세스와 결과의 분리 ───────────────────────────────────────────────────
 
 describe('grade — 프로세스와 결과의 분리', () => {
+  // 은닉 구간이 갈리면 이 답안의 운명도 갈린다 — 위로 가면 익절, 아래로 가면 손절.
+  // 결과가 양쪽에서 정반대가 되어야 "실행 축에 재생 결과를 섞으면 잡힌다" 가 성립한다.
   const answer: Answer = {
-    direction: 'long', entry: 112, stopLoss: 104, takeProfit: 130,
+    direction: 'long', entry: 112.5, stopLoss: 107, takeProfit: 118,
     tags: ['liq_sweep_high', 'ob_bull_support'],
   }
 
@@ -455,11 +467,16 @@ describe('grade — 프로세스와 결과의 분리', () => {
     expect(up.execution).toEqual(down.execution)
     expect(up.processScore).toBe(down.processScore)
 
-    // 위 동일성이 "양쪽 다 아무 일도 없었다" 라서가 아니라는 것까지 확인한다
+    // 위 동일성이 "양쪽 다 아무 일도 없었다" 라서가 아니라는 것까지 확인한다.
+    // 같은 답안이 한쪽에서는 익절하고 다른 쪽에서는 손절당한다 — 실행 점수에 재생
+    // 결과를 조금이라도 섞으면 위 toEqual 이 반드시 깨진다.
     expect(up.direction.correct).toBe('long')
     expect(down.direction.correct).toBe('short')
     expect(up.outcomeScore).not.toBe(down.outcomeScore)
-    expect(up.replay.r).not.toBe(down.replay.r)
+    expect(up.replay.exit).toBe('tp')
+    expect(down.replay.exit).toBe('sl')
+    expect(up.replay.r).toBeGreaterThan(0)
+    expect(down.replay.r).toBeLessThan(0)
   })
 
   it('답안의 손절가를 바꿔도 방향 점수는 변하지 않는다', () => {
