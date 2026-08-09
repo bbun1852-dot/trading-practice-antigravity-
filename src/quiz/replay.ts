@@ -13,20 +13,32 @@ const NONE: ReplayResult = { filled: false, exit: 'none', exitBarIndex: null, pn
  * **체결 규칙(지정가 진입).** 봉의 [low, high] 구간이 entry 가격을 포함하면 그 봉에서
  * 체결된 것으로 본다.
  *
- * **같은 봉에서 체결과 SL/TP 판정이 함께 일어날 수 있다 — 의도적 선택이다.**
- * 방금 체결된 봉이라도, 그 봉의 고가·저가가 SL/TP 를 건드리면 그 자리에서 바로
- * 청산한다(체결을 다음 봉으로 미루지 않는다). 근거: 체결 조건
- * `low <= entry <= high` 가 성립했다는 건 그 봉 안에서 가격이 실제로 entry 를
- * 지나갔다는 뜻이고, 같은 봉의 저가/고가가 SL/TP 에도 닿았다면 그 역시 그 봉 안에서
- * 실제로 있었던 일이다. 체결 봉과 청산 봉을 인위적으로 분리해 청산 판정을 다음
- * 봉까지 미루면, 그 봉 안에서 실제로 발생했을 손실(혹은 이익)을 누락시켜 오히려
- * 채점을 실제보다 후하게 만든다 — "결정 시점부터 하나도 안 놓치고 다 본다"는
- * 이 함수의 존재 이유와 어긋난다. 4시간·일봉처럼 굵은 타임프레임에서는 진입과
- * 청산이 한 봉 안에서 같이 일어나는 일이 드물지 않다.
+ * **체결이 일어난 바로 그 봉에서는 SL 은 인정하고 TP 는 인정하지 않는다(리뷰 C1
+ * 수정 — 이전 버전은 둘 다 인정했고, 봉 모양에 따라 조작된 승패를 냈다).**
  *
- * **같은 봉에서 SL 과 TP 를 모두 터치하면 SL 이 우선한다.** 봉 안의 체결 순서는
- * OHLC 만으로는 알 수 없고, 유리한 쪽을 가정하면 채점이 실제보다 후해진다 —
- * 불리한(보수적인) 쪽을 택한다.
+ * 체결 조건 `low<=entry<=high` 가 성립했다는 건 그 봉 안에서 가격이 entry 를
+ * 지나갔다는 사실은 확정하지만, "체결이 SL/TP 터치보다 봉 안에서 먼저였는지
+ * 나중이었는지"는 OHLC 만으로 알 수 없다 — 이건 SL-vs-TP 동시 터치 문제와는
+ * 별개의 순서 불확실성이다. 예:
+ *
+ * - 롱, entry=100·SL=50·TP=110, 봉 O=105 H=112 L=95 C=103(장대 음봉). 시가에서
+ *   고가로 올라 TP(110)를 먼저 찍고, 그 다음 저가로 내려오며 entry(100)를 지나
+ *   체결되는 경로가 있을 수 있다 — 이 경로라면 TP 는 체결 *전에* 지나간 것이라
+ *   진짜 이익이 아니다. 하지만 반대 경로(체결 후 TP)도 OHLC 만으론 배제 못 한다.
+ * - 롱, entry=100·SL=95, 봉 O=98 H=105 L=90 C=102(장대 양봉). 시가에서 저가로
+ *   내려가 SL(95)을 먼저 찍고, 그 다음 고가로 올라오며 entry(100)를 지나
+ *   체결되는 경로가 있을 수 있다 — 이 경로라면 SL 은 체결 *전*이라 진짜 손실이
+ *   아니다. 하지만 반대 경로(체결 후 SL)도 배제 못 한다.
+ *
+ * 두 경우 모두 순서를 확정할 수 없으므로, 이 모듈 전체의 원칙("불리한 쪽을
+ * 가정한다")을 체결 봉에도 똑같이 적용한다: 체결 봉에서는 불리한 쪽(SL)은
+ * 인정하고 유리한 쪽(TP)은 인정하지 않는다. 위 두 예시는 각각 이 함수의
+ * 테스트("리뷰어 반례" 로 표기)로 그대로 들어가 있다.
+ *
+ * 체결 다음 봉부터는 포지션이 이미 열려 있었다는 게 확실하므로 이 모호함
+ * 자체가 없다 — SL/TP 둘 다 정상적으로, 그리고 **같은 봉에서 SL 과 TP 를
+ * 모두 터치하면 SL 이 우선**한다(봉 안의 순서를 알 수 없으니 여전히 불리한
+ * 쪽을 택한다).
  */
 export function replay(q: Question, a: Answer): ReplayResult {
   if (a.direction === 'flat') return NONE
@@ -62,17 +74,27 @@ export function replay(q: Question, a: Answer): ReplayResult {
     const c = q.candles[j]
     lastIndex = j
 
+    const filledBefore = filled
     if (!filled) {
       if (c.low <= entry && entry <= c.high) filled = true
       else continue
     }
+    // 이 봉에서 막 체결됐는가(직전 봉까지는 미체결이었는가) — 위 함수 설명의
+    // 체결-봉 규칙이 이 플래그로 갈린다.
+    const justFilled = !filledBefore
 
     const hitSl = isLong ? c.low <= stopLoss : c.high >= stopLoss
-    const hitTp = takeProfit !== undefined
+    // 체결이 막 이 봉에서 일어났다면 TP 는 인정하지 않는다(justFilled 가드) —
+    // 체결과 TP 터치의 봉 내 순서를 알 수 없으니 유리한 쪽을 가정하지 않는다.
+    // SL 은 justFilled 여부와 무관하게 그대로 인정한다(불리한 쪽이라 봉 순서를
+    // 몰라도 안전하게 가정할 수 있다).
+    const hitTp = takeProfit !== undefined && !justFilled
       ? (isLong ? c.high >= takeProfit : c.low <= takeProfit)
       : false
 
     // SL 을 먼저 검사한다 — 순서 자체가 "동시 터치 시 SL 우선" 규칙의 구현이다.
+    // (체결 봉에서는 hitTp 가 이미 justFilled 로 걸러져 있으므로, 이 순서는
+    // 체결 *다음* 봉부터 SL/TP 가 같이 터지는 경우에만 실제로 작동한다.)
     if (hitSl) {
       return { filled: true, exit: 'sl', exitBarIndex: j, pnlPct: toPct(stopLoss), r: toR(stopLoss) }
     }
