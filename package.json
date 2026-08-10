@@ -8,7 +8,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "script": "tsx",
-    "calibrate": "tsx scripts/calibrate.ts"
+    "calibrate": "tsx scripts/calibrate.ts",
+    "drill": "tsx scripts/drill.ts"
   },
   "dependencies": {
     "idb": "^8.0.3"
