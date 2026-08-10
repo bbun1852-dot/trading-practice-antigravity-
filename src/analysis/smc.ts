@@ -145,7 +145,7 @@ export function detectLiquiditySweep(cs: Candle[]): Signal[] {
 
   for (let i = 0; i < cs.length; i++) {
     const lo = lastConfirmedPivot(pivots, i, 'low')
-    if (lo && lo.pivotBar < i && cs[i].low < lo.price && cs[i].close > lo.price) {
+    if (lo && cs[i].low < lo.price && cs[i].close > lo.price) {
       out.push({
         id: 'liq_sweep_low', tier: 1, kind: 'smc', side: 'bullish',
         barIndex: i, confidence: 'A', strength: 3,
@@ -154,7 +154,7 @@ export function detectLiquiditySweep(cs: Candle[]): Signal[] {
       })
     }
     const hi = lastConfirmedPivot(pivots, i, 'high')
-    if (hi && hi.pivotBar < i && cs[i].high > hi.price && cs[i].close < hi.price) {
+    if (hi && cs[i].high > hi.price && cs[i].close < hi.price) {
       out.push({
         id: 'liq_sweep_high', tier: 1, kind: 'smc', side: 'bearish',
         barIndex: i, confidence: 'A', strength: 3,
@@ -174,7 +174,7 @@ export function detectMSB(cs: Candle[]): Signal[] {
 
   for (let i = 0; i < cs.length; i++) {
     const hi = lastConfirmedPivot(pivots, i, 'high')
-    if (hi && hi.pivotBar < i && cs[i].close > hi.price && hi.pivotBar > lastBullBreak) {
+    if (hi && cs[i].close > hi.price && hi.pivotBar > lastBullBreak) {
       lastBullBreak = hi.pivotBar
       out.push({
         id: 'msb_bull', tier: 1, kind: 'structure', side: 'bullish',
@@ -184,7 +184,7 @@ export function detectMSB(cs: Candle[]): Signal[] {
       })
     }
     const lo = lastConfirmedPivot(pivots, i, 'low')
-    if (lo && lo.pivotBar < i && cs[i].close < lo.price && lo.pivotBar > lastBearBreak) {
+    if (lo && cs[i].close < lo.price && lo.pivotBar > lastBearBreak) {
       lastBearBreak = lo.pivotBar
       out.push({
         id: 'msb_bear', tier: 1, kind: 'structure', side: 'bearish',

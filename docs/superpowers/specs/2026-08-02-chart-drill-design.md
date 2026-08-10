@@ -280,6 +280,7 @@ OBV (A): `obv_divergence` · `obv_trend_confirm`
 `candle_bear_harami` · `candle_morning_star` · `candle_evening_star` ·
 `candle_three_soldiers` · `candle_three_crows` · `candle_tri_star` · `candle_tweezer` ·
 `candle_long_wick` · `candle_inside_bar`
+  * 참고: `candle_inv_hammer`와 `candle_shooting_star`는 도지(body=0)와 구분하기 위해 `body > 0` (양봉/음봉 무관) 조건을 요구한다.
 
 ### 6.5 와이코프 (전부 C등급, 참고 라벨)
 
