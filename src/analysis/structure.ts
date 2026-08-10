@@ -1,5 +1,6 @@
 import type { Candle } from '../data/types'
 import type { Signal } from './signalTypes'
+import { fmtPrice } from '../format'
 
 export type Pivot = {
   /** 신호 확정 시점 = pivotBar + n */
@@ -58,10 +59,10 @@ export function detectTrend(cs: Candle[]): Signal[] {
 
     if (hh && hl) {
       out.push({ ...base, id: 'trend_up_structure', side: 'bullish', strength: 2,
-        evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 상승, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 상승 (HH/HL)` })
+        evidence: `고점 ${fmtPrice(highs[0].price)}→${fmtPrice(highs[1].price)} 상승, 저점 ${fmtPrice(lows[0].price)}→${fmtPrice(lows[1].price)} 상승 (HH/HL)` })
     } else if (lh && ll) {
       out.push({ ...base, id: 'trend_down_structure', side: 'bearish', strength: 2,
-        evidence: `고점 ${highs[0].price.toFixed(2)}→${highs[1].price.toFixed(2)} 하락, 저점 ${lows[0].price.toFixed(2)}→${lows[1].price.toFixed(2)} 하락 (LH/LL)` })
+        evidence: `고점 ${fmtPrice(highs[0].price)}→${fmtPrice(highs[1].price)} 하락, 저점 ${fmtPrice(lows[0].price)}→${fmtPrice(lows[1].price)} 하락 (LH/LL)` })
     } else {
       out.push({ ...base, id: 'trend_range', side: 'neutral', strength: 1,
         evidence: '고점·저점이 한 방향으로 정렬되지 않음 (횡보)' })

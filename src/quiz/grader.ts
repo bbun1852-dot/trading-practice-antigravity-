@@ -5,6 +5,7 @@ import { activeSignalsAt, type ActiveSignal } from './lifetime'
 import { TAG_BY_ID, signalWeight } from './taxonomy'
 import { classifyOutcome } from './generator'
 import { replay } from './replay'
+import { fmtPrice } from '../format'
 import type { Answer, Direction, EvidenceVerdict, GradeReport, Question, ReplayResult } from './types'
 
 export const DIRECTION_MAX = 30
@@ -231,11 +232,11 @@ function gradeExecution(q: Question, a: Answer): ExecutionResult {
   const lastHigh = lastPivot('high')
   if (isLong && lastLow && stopLoss < lastLow.price) {
     score += STRUCTURAL_BONUS
-    notes.push(`직전 스윙 로우 ${lastLow.price.toFixed(2)} 아래 — 구조적 손절`)
+    notes.push(`직전 스윙 로우 ${fmtPrice(lastLow.price)} 아래 — 구조적 손절`)
   }
   if (!isLong && lastHigh && stopLoss > lastHigh.price) {
     score += STRUCTURAL_BONUS
-    notes.push(`직전 스윙 하이 ${lastHigh.price.toFixed(2)} 위 — 구조적 손절`)
+    notes.push(`직전 스윙 하이 ${fmtPrice(lastHigh.price)} 위 — 구조적 손절`)
   }
 
   // ── R:R ──

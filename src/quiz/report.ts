@@ -2,15 +2,16 @@ import type { Answer, GradeReport, Question } from './types'
 import { TAG_BY_ID } from './taxonomy'
 import { revealed } from './generator'
 import { DIRECTION_MAX } from './grader'
+import { fmtPrice } from '../format'
 
 const label = (id: string) => TAG_BY_ID.get(id)?.label ?? id
 
 /**
- * 가격 표기. 답안의 값을 그대로 찍으면 `69266.63299999999` 같은 부동소수 노이즈가
+ * 답안 가격 표기. 값을 그대로 찍으면 `69266.63299999999` 같은 부동소수 노이즈가
  * 리포트에 실린다 — 답안은 종가에 배수를 곱해 만들어지는 값이라 흔한 일이다.
- * 소수 둘째 자리는 코드베이스 전체의 관례다 (grader 의 notes, 감지기의 evidence 문자열).
+ * 자릿수 규칙은 감지기의 evidence 문자열과 같은 `fmtPrice` 를 쓴다.
  */
-const price = (v: number | undefined) => (v === undefined ? '-' : v.toFixed(2))
+const price = (v: number | undefined) => (v === undefined ? '-' : fmtPrice(v))
 
 /** 채점 결과를 사용자의 기존 오답노트와 같은 형식의 마크다운으로 낸다 (스펙 8절) */
 export function toMarkdown(q: Question, a: Answer, r: GradeReport): string {

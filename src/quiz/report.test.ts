@@ -68,7 +68,7 @@ describe('헤더 줄이 채점 결과와 어긋나지 않는다', () => {
   it('익절가·손절가가 없으면 자리를 비운다 — undefined 를 찍지 않는다', () => {
     const partial: Answer = { direction: 'long', entry: 100, tags: [] }
     const md = toMarkdown(q, partial, grade(q, partial))
-    expect(md).toContain('진입 100.00 / 손절 - / 익절 -')
+    expect(md).toContain('진입 100.0000 / 손절 - / 익절 -')
     expect(md).not.toContain('undefined')
   })
 

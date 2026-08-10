@@ -2,6 +2,7 @@ import type { Candle } from '../data/types'
 import type { Signal } from './signalTypes'
 import { atr } from './indicators'
 import { findPivots, type Pivot } from './structure'
+import { fmtPrice } from '../format'
 
 /** 상승/하락 FVG 중 decisionIndex 시점에 아직 메워지지 않은 것만 낸다 */
 export function detectFVG(cs: Candle[]): Signal[] {
@@ -24,7 +25,7 @@ export function detectFVG(cs: Candle[]): Signal[] {
       id: bullGap ? 'fvg_bull' : 'fvg_bear',
       tier: 2, kind: 'smc', side: bullGap ? 'bullish' : 'bearish',
       barIndex: i, confidence: 'A', strength: 2,
-      evidence: `${bullGap ? '상승' : '하락'} FVG ${lo.toFixed(2)}~${hi.toFixed(2)} 미충족`,
+      evidence: `${bullGap ? '상승' : '하락'} FVG ${fmtPrice(lo)}~${fmtPrice(hi)} 미충족`,
       refs: { priceLow: lo, priceHigh: hi, fromBar: i - 2, toBar: i },
     })
   }
@@ -85,7 +86,7 @@ function mergeCluster(cluster: Signal[]): Signal {
   return {
     ...first,
     strength,
-    evidence: `겹치는 오더블록 ${cluster.length}개 병합: ${label} 구간 ${priceLow.toFixed(2)}~${priceHigh.toFixed(2)}`,
+    evidence: `겹치는 오더블록 ${cluster.length}개 병합: ${label} 구간 ${fmtPrice(priceLow)}~${fmtPrice(priceHigh)}`,
     refs: { priceLow, priceHigh, pivotBar, fromBar: pivotBar, toBar: first.barIndex },
   }
 }
@@ -109,7 +110,7 @@ export function detectOrderBlocks(cs: Candle[]): Signal[] {
         out.push({
           id: 'ob_bull_support', tier: 1, kind: 'smc', side: 'bullish',
           barIndex: j, confidence: 'A', strength: 3,
-          evidence: `${j - i}봉 뒤 ${((cs[j].close - cs[i].low) / range).toFixed(1)}ATR 상승 임펄스 직전 음봉 (${cs[i].low.toFixed(2)}~${cs[i].high.toFixed(2)})`,
+          evidence: `${j - i}봉 뒤 ${((cs[j].close - cs[i].low) / range).toFixed(1)}ATR 상승 임펄스 직전 음봉 (${fmtPrice(cs[i].low)}~${fmtPrice(cs[i].high)})`,
           refs: { priceLow: cs[i].low, priceHigh: cs[i].high, pivotBar: i, fromBar: i, toBar: j },
         })
         break
@@ -118,7 +119,7 @@ export function detectOrderBlocks(cs: Candle[]): Signal[] {
         out.push({
           id: 'ob_bear_resistance', tier: 1, kind: 'smc', side: 'bearish',
           barIndex: j, confidence: 'A', strength: 3,
-          evidence: `${j - i}봉 뒤 ${((cs[i].high - cs[j].close) / range).toFixed(1)}ATR 하락 임펄스 직전 양봉 (${cs[i].low.toFixed(2)}~${cs[i].high.toFixed(2)})`,
+          evidence: `${j - i}봉 뒤 ${((cs[i].high - cs[j].close) / range).toFixed(1)}ATR 하락 임펄스 직전 양봉 (${fmtPrice(cs[i].low)}~${fmtPrice(cs[i].high)})`,
           refs: { priceLow: cs[i].low, priceHigh: cs[i].high, pivotBar: i, fromBar: i, toBar: j },
         })
         break
@@ -149,7 +150,7 @@ export function detectLiquiditySweep(cs: Candle[]): Signal[] {
       out.push({
         id: 'liq_sweep_low', tier: 1, kind: 'smc', side: 'bullish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `스윙로우 ${lo.price.toFixed(2)} 를 저가 ${cs[i].low.toFixed(2)} 로 이탈 후 종가 ${cs[i].close.toFixed(2)} 로 복귀 (롱 손절 사냥)`,
+        evidence: `스윙로우 ${fmtPrice(lo.price)} 를 저가 ${fmtPrice(cs[i].low)} 로 이탈 후 종가 ${fmtPrice(cs[i].close)} 로 복귀 (롱 손절 사냥)`,
         refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
       })
     }
@@ -158,7 +159,7 @@ export function detectLiquiditySweep(cs: Candle[]): Signal[] {
       out.push({
         id: 'liq_sweep_high', tier: 1, kind: 'smc', side: 'bearish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `스윙하이 ${hi.price.toFixed(2)} 를 고가 ${cs[i].high.toFixed(2)} 로 이탈 후 종가 ${cs[i].close.toFixed(2)} 로 복귀 (숏 손절 사냥)`,
+        evidence: `스윙하이 ${fmtPrice(hi.price)} 를 고가 ${fmtPrice(cs[i].high)} 로 이탈 후 종가 ${fmtPrice(cs[i].close)} 로 복귀 (숏 손절 사냥)`,
         refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
       })
     }
@@ -179,7 +180,7 @@ export function detectMSB(cs: Candle[]): Signal[] {
       out.push({
         id: 'msb_bull', tier: 1, kind: 'structure', side: 'bullish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `종가 ${cs[i].close.toFixed(2)} 가 직전 스윙하이 ${hi.price.toFixed(2)} 상향 돌파 (구조 상승)`,
+        evidence: `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙하이 ${fmtPrice(hi.price)} 상향 돌파 (구조 상승)`,
         refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
       })
     }
@@ -189,7 +190,7 @@ export function detectMSB(cs: Candle[]): Signal[] {
       out.push({
         id: 'msb_bear', tier: 1, kind: 'structure', side: 'bearish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `종가 ${cs[i].close.toFixed(2)} 가 직전 스윙로우 ${lo.price.toFixed(2)} 하향 붕괴 (구조 하락)`,
+        evidence: `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙로우 ${fmtPrice(lo.price)} 하향 붕괴 (구조 하락)`,
         refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
       })
     }
