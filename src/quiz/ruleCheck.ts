@@ -104,6 +104,18 @@ const MA_ALIGN = ['ma_aligned_bull', 'ma_aligned_bear']
  */
 const MA_CROSS_UNSCORED = ['ma_golden_cross', 'ma_dead_cross']
 
+/** Part 3 에서 감지기가 생겼다. 스윙 시트의 '피보나치' 행이 이걸로 살아난다 */
+const FIB = ['fib_retrace_382', 'fib_retrace_5', 'fib_retrace_618', 'fib_extension', 'fib_confluence']
+
+/**
+ * 매물대 — **세 시트 어디에도 행이 없다.**
+ *
+ * Part 3 에서 감지기는 생겼지만 사용자의 엑셀에 해당 항목이 없다. 행을 새로 만들지
+ * 않고 미배점으로 둔다 — 없는 행을 지어내면 이 패널이 사용자의 34점 체계가 아니라
+ * 내가 만든 체계가 된다. 엑셀에 매물대 행을 추가하기로 정하면 그때 살린다.
+ */
+const VOLUME_NODE_UNSCORED = ['volume_node_high', 'volume_node_low']
+
 // ── 프로파일 정의 ────────────────────────────────────────────────────────────
 //
 // 엑셀 세 시트를 행 순서까지 그대로 옮겼다. 감지기가 없는 항목(거시 차트 패턴·추세선·
@@ -135,7 +147,9 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
     ],
     // 단타 시트에는 MA 행도 OBV 행도 없다. 1~15분봉에서 이평 배열과 누적 수급은
     // 진입 근거로 쓰지 않는다는 뜻이라, 있는 그대로 미배점으로 둔다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_ALIGN, ...OBV],
+    // 단타 시트에는 피보나치 행도 없다 — 1~15분봉에서 되돌림 레벨을 진입 근거로
+    // 쓰지 않는다는 뜻이라, MA·OBV 와 같은 방식으로 미배점에 둔다.
+    unscored: [...MA_CROSS_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...VOLUME_NODE_UNSCORED],
   },
   swing: {
     id: 'swing',
@@ -153,13 +167,13 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('obv', 'OBV 누적 수급', 3, false, OBV),
       r('ma_align', '이동평균 배열 (MA)', 3, false, MA_ALIGN),
       r('trendline', '추세선 (Trendline)', 2, false, []),  // 감지기 미구현 (Part 3)
-      r('fibonacci', '피보나치 (Fibonacci)', 2, false, []), // 감지기 미구현 (Part 3)
+      r('fibonacci', '피보나치 (Fibonacci)', 2, false, FIB),  // Part 3 에서 살아났다
       r('bollinger', '볼린저 밴드', 3, false, BOLLINGER),
       r('rsi', 'RSI 지표', 2, false, RSI),
       r('macd', 'MACD 지표', 2, false, MACD),
       r('candle', '캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
-    unscored: [...MA_CROSS_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...VOLUME_NODE_UNSCORED],
   },
   position: {
     id: 'position',
@@ -181,7 +195,8 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('macd', 'MACD 지표', 2, false, MACD),
       r('candle', '거시 캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
-    unscored: [...MA_CROSS_UNSCORED],
+    // 장기 시트에도 피보나치 행이 없다. 스윙 시트에만 있다.
+    unscored: [...MA_CROSS_UNSCORED, ...FIB, ...VOLUME_NODE_UNSCORED],
   },
 }
 

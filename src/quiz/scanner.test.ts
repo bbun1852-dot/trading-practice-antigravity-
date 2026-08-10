@@ -341,18 +341,26 @@ describe('scanForSetups', () => {
     }
   })
 
+  // 아래 두 검사는 봉마다 detectAll 을 돌리는 전수 스캔이라 구조적으로 무겁다.
+  // Part 3 에서 볼륨 프로파일(창 120봉을 봉마다 재계산, O(n·LOOKBACK))이 들어오며
+  // detectAll 이 1000봉당 약 15ms → 20ms 가 됐고 기본 5초 제한을 넘었다.
+  // 프로덕션 경로는 영향이 없다 — scanForSetups 2단계는 후보(1000봉당 약 27개)에만
+  // 정확 경로를 돌리므로 여전히 1초 미만이다. 느려진 것은 이 전수 검사뿐이라
+  // 제한만 올린다.
+  const HEAVY_TIMEOUT = 60_000
+
   it('2단계 스캔 결과가 전수 정확 스캔과 완전히 같다 — 1단계가 후보를 잃지 않는다', () => {
     // 위험 체크포인트의 핵심. 1단계 coarseFloor 는 증명이 아니라 실측으로 고른 값이라,
     // "빠른 경로가 느린 경로와 같은 답을 낸다" 를 회귀로 고정해 둔다.
     for (const minScore of [DEFAULT_MIN_SCORE, 100, 160]) {
       expect(scanForSetups(cs, { minScore })).toEqual(bruteForce(minScore, DEFAULT_MERGE_WINDOW))
     }
-  })
+  }, HEAVY_TIMEOUT)
 
   it('같은 입력에 항상 같은 후보를 낸다', () => {
     expect(scanForSetups(cs)).toEqual(scanForSetups(cs))
     expect(scanForSetups(synthCandles(600))).toEqual(scanForSetups(cs))
-  })
+  }, HEAVY_TIMEOUT)
 
   it('워밍업 구간에서는 후보를 내지 않는다', () => {
     // WARMUP 을 그대로 비교에 쓰면 이 검사는 항상 참이다 — scanForSetups 가 i = WARMUP
