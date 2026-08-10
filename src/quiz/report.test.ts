@@ -56,6 +56,22 @@ describe('헤더 줄이 채점 결과와 어긋나지 않는다', () => {
     expect(md).toContain('60점 만점 환산')
   })
 
+  it('가격을 소수 둘째 자리까지 반올림해 적는다 — 부동소수 노이즈를 그대로 흘리지 않는다', () => {
+    const noisy: Answer = {
+      direction: 'long', entry: 71408.9, stopLoss: 69266.63299999999, takeProfit: 75693.434, tags: [],
+    }
+    const md = toMarkdown(q, noisy, grade(q, noisy))
+    expect(md).toContain('진입 71408.90 / 손절 69266.63 / 익절 75693.43')
+    expect(md).not.toContain('69266.63299999999')
+  })
+
+  it('익절가·손절가가 없으면 자리를 비운다 — undefined 를 찍지 않는다', () => {
+    const partial: Answer = { direction: 'long', entry: 100, tags: [] }
+    const md = toMarkdown(q, partial, grade(q, partial))
+    expect(md).toContain('진입 100.00 / 손절 - / 익절 -')
+    expect(md).not.toContain('undefined')
+  })
+
   it('진입 답안은 체결 결과를 그대로 적고 환산 주석을 붙이지 않는다', () => {
     const entered: Answer = { direction: 'long', entry: 100, stopLoss: 99, takeProfit: 103, tags: [] }
     const r = grade(q, entered)
