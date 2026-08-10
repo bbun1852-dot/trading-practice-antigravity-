@@ -1,6 +1,7 @@
 import type { Answer, GradeReport, Question } from './types'
 import { TAG_BY_ID } from './taxonomy'
 import { revealed } from './generator'
+import { DIRECTION_MAX } from './grader'
 
 const label = (id: string) => TAG_BY_ID.get(id)?.label ?? id
 
@@ -15,13 +16,23 @@ export function toMarkdown(q: Question, a: Answer, r: GradeReport): string {
   L.push(`**내 판단:** ${a.direction}` +
     (a.entry !== undefined ? ` / 진입 ${a.entry} / 손절 ${a.stopLoss} / 익절 ${a.takeProfit ?? '-'}` : ''))
   L.push(`**정답 방향:** ${r.direction.correct}`)
-  
-  const resultStr = r.replay 
-    ? `${r.replay.exit} ${r.replay.r.toFixed(2)}R`
-    : '불성립 주문 (실행 불가)'
 
+  // 관망의 replay 는 null 이 아니라 NONE 센티넬(exit:'none', r:0)이다 — grade() 가
+  // 관망을 orderValid=true 로 보기 때문이다. 그대로 찍으면 헤더가 "none 0.00R" 이
+  // 되어, 바로 아래 judgement 의 "체결도 손익도 없습니다" 와 한 문서 안에서 충돌한다.
+  const resultStr = !r.replay
+    ? '불성립 주문 (실행 불가)'
+    : a.direction === 'flat' ? '관망 — 체결 없음'
+    : !r.replay.filled ? '미체결'
+    : `${r.replay.exit} ${r.replay.r.toFixed(2)}R`
+
+  // 분모를 함께 적는다. 관망이면 실행 축이 판정에서 빠져 applicableMax 가 60 이고
+  // totalScore 는 거기서 100점으로 환산된 값이라, 분모 없이는 앞의 두 수와 합이 맞지
+  // 않고(0 + 30 인데 총 50) 고정 100점 만점으로도 오독된다 (types.ts 의 applicableMax).
+  const scaleNote = r.applicableMax === 100 ? '' : ` (${r.applicableMax}점 만점 환산)`
   L.push(`**결과:** ${resultStr}  |  ` +
-    `프로세스 ${r.processScore}점 / 결과 ${r.outcomeScore}점 / 총 ${r.totalScore}점`)
+    `프로세스 ${r.processScore}/${r.processMax} · 결과 ${r.outcomeScore}/${DIRECTION_MAX} · ` +
+    `총 ${r.totalScore}/100${scaleNote}`)
   L.push('')
 
   L.push('### 내가 본 근거')
