@@ -271,15 +271,22 @@ FVG: `fvg_bull` · `fvg_bear` · `fvg_rebalance`(자석 효과 진행 중) — �
 
 RSI (A): `rsi_overbought` · `rsi_oversold` · `rsi_bull_div` · `rsi_bear_div` ·
 `rsi_hidden_div` · `rsi_50_break` · `rsi_failure_swing`
-MACD (A): `macd_golden` · `macd_dead` · `macd_hist_turn` · `macd_zero_break`
+MACD (A): `macd_golden` · `macd_dead` · `macd_divergence` · `macd_hist_turn` · `macd_zero_break`
+  * 정정(2026-08-09): `macd_divergence`가 이 목록에서 빠져 있었다. `detectDivergence`가
+    실제로 배출하고 taxonomy에도 등재돼 있다 — **코드가 옳고 문서가 누락이었다.**
+    `macd_hist_turn`은 여전히 미구현이다.
 이동평균 (A): `ma_golden_cross` · `ma_dead_cross` · `ma_support` · `ma_resistance` ·
 `ma_aligned_bull` · `ma_aligned_bear`
 OBV (A): `obv_divergence` · `obv_trend_confirm`
 캔들패턴 (전부 A): `candle_hammer` · `candle_inv_hammer` · `candle_shooting_star` ·
 `candle_doji` · `candle_bull_engulf` · `candle_bear_engulf` · `candle_bull_harami` ·
 `candle_bear_harami` · `candle_morning_star` · `candle_evening_star` ·
-`candle_three_soldiers` · `candle_three_crows` · `candle_tri_star` · `candle_tweezer` ·
-`candle_long_wick` · `candle_inside_bar`
+`candle_three_soldiers` · `candle_three_crows` · `candle_tri_star` · `tweezer_top` ·
+`tweezer_bottom` · `candle_long_wick` · `candle_inside_bar`
+  * 정정(2026-08-09): `candle_tweezer` 하나였던 것을 Part 2 Task 2에서 `tweezer_top`(약세) /
+    `tweezer_bottom`(강세)으로 분리했다. 같은 id가 상반된 side로 발화해 id가 키 노릇을
+    못 했고, 허용오차가 가격의 0.1%라 4h 1000봉당 163~314회 과다 발화했다 — 허용오차를
+    ATR 상대로 바꾸고 "두 봉의 색이 반대" 조건을 더했다.
   * 참고: `candle_inv_hammer`와 `candle_shooting_star`는 도지(body=0)와 구분하기 위해 `body > 0` (양봉/음봉 무관) 조건을 요구한다.
 
 ### 6.5 와이코프 (전부 C등급, 참고 라벨)
