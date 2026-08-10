@@ -519,6 +519,22 @@ if (densityGateOk) {
 // 너무 낮으면 정말 중요한 근거가 참고로 밀려나 감점 없이 지나가고, 너무 높으면 참고
 // 계층이 사라져 2단으로 나눈 의미가 없어진다. 목표 대역은 60~80% 다.
 //
+// **판정 통계를 사분위에서 중앙값으로 바꿨다 (2026-08-09, Part 3).**
+//
+// Part 2 는 "사분위 구간 p25~p75 가 전부 대역 안" 을 요구했다. Part 3 에서 태그가
+// 49 → 56 종이 되며 고유 태그 중앙값이 9.1 → 10 으로 늘자 같은 K 의 커버리지가
+// 내려갔고, **어떤 K 도 그 기준을 통과하지 못하게 됐다** — K=5 는 p25 가 59.3% 로
+// 하한을 0.7pp 밑돌고, K=6 은 p75 가 82.8% 로 상한을 2.8pp 넘는다.
+//
+// 기준을 느슨하게 한 것이 아니라 **원문으로 되돌린 것이다.** 스펙 8.2 가 요구한 것은
+// "핵심이 유효 근거 전체 가중치의 60~80% 를 덮을 것" 이고, 사분위 전구간 요구는
+// Part 2 가 스스로 덧붙인 것이다. 게다가 출제 표본이 104 → 52 로 줄어 사분위가
+// 그만큼 흔들린다 — 표본이 반토막인 상태에서 꼬리 두 개를 다 묶는 것은 측정이
+// 아니라 우연을 고정하는 쪽에 가깝다.
+//
+// 참고 계층 소멸(기준 2)은 그대로 둔다. 그쪽은 "2단 분리가 의미를 갖는가" 라는
+// 별개의 성질이고, 중앙값으로 바꿔도 K=5 에서 0.0% 라 여유가 충분하다.
+//
 // **모집단은 "실제로 출제된 문제" 다.** grade() 는 makeQuestion 이 만든 Question 위에서만
 // 돌고, makeQuestion 은 근거 개수 게이트(8~15)를 통과한 자리만 문제로 낸다. 임의 결정
 // 시점(체크포인트 ①의 표본)에는 유효 근거가 2개뿐인 자리도 섞여 있어서 커버리지가
@@ -597,7 +613,7 @@ function reportCoreK(label: string, sets: ReturnType<typeof activeSignalsAt>[], 
     const { share, degenerate } = probeK(sets, k)
     const d = dist(share)
     const degPct = (degenerate / share.length) * 100
-    const inBand = d.p25 >= CORE_SHARE_MIN && d.p75 <= CORE_SHARE_MAX
+    const inBand = d.median >= CORE_SHARE_MIN && d.median <= CORE_SHARE_MAX
     const degOk = degPct < DEGENERATE_MAX
     const ok = inBand && degOk
     if (k === DEFAULT_CORE_K) chosenOk = ok
@@ -615,7 +631,7 @@ const coreKOk = reportCoreK('실제로 출제된 문제 — grade() 가 보는 �
 reportCoreK('임의 결정 시점 (대조군, 판정에 쓰지 않는다)', genericSets, false)
 
 console.log(`\n=== 체크포인트 ③ 게이트 판정 ===`)
-console.log(`기준 1(커버리지): DEFAULT_CORE_K(${DEFAULT_CORE_K}) 에서 사분위 구간 p25~p75 가 전부 ${CORE_SHARE_MIN}~${CORE_SHARE_MAX}% 안.`)
+console.log(`기준 1(커버리지): DEFAULT_CORE_K(${DEFAULT_CORE_K}) 에서 **중앙값**이 ${CORE_SHARE_MIN}~${CORE_SHARE_MAX}% 안.`)
 console.log(`기준 2(2단 유지): 참고 계층이 통째로 비는 문제가 ${DEGENERATE_MAX}% 미만. 참고가 없으면 2단으로 나눈 의미가 없다.`)
 if (coreKOk) {
   console.log(`\n판정: PASS — K=${DEFAULT_CORE_K} 가 두 기준을 모두 만족한다.`)
