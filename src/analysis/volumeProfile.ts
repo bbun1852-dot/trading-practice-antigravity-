@@ -112,8 +112,16 @@ export function detectVolumeNodes(cs: Candle[]): Signal[] {
     const mean = total / BINS
 
     const c = cs[i]
-    /** 현재 봉이 그 구간에 닿았는가 */
-    const touches = (n: Node) => c.low <= n.hi && c.high >= n.lo
+    const prev = cs[i - 1]
+    /**
+     * 현재 봉이 그 구간에 **새로 진입했는가.**
+     *
+     * 단순히 "닿았는가" 로 두면 가격이 매물대 안에 머무는 동안 매 봉 발화한다 —
+     * 실측에서 volume_node_high 가 1000봉당 274~432회로 상한(150)을 크게 넘었다.
+     * 직전 봉도 같은 구간에 걸쳐 있었다면 그건 진입이 아니라 체류다.
+     */
+    const touches = (n: Node) =>
+      c.low <= n.hi && c.high >= n.lo && !(prev.low <= n.hi && prev.high >= n.lo)
 
     // 같은 종류는 봉당 하나만 낸다. 여러 구간에 걸치면 가장 극단적인 것을 대표로
     // 삼는다 — 쌍마다 내면 한 봉에서 같은 태그가 여러 번 잡혀 배점이 부풀려진다.

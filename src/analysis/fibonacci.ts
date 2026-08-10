@@ -18,8 +18,11 @@ import { fmtPrice } from '../format'
 /** 레그가 이 배수의 ATR 보다 작으면 무시한다 — 노이즈에 피보를 그리지 않는다 */
 export const MIN_LEG_ATR = 2.0
 
-/** 확장 비율. 1.272 도 흔히 쓰이나 발화율을 보고 6번 태스크에서 정한다 */
-export const EXTENSION_RATIO = 1.618
+/**
+ * 확장 비율. 1.618 하나로 시작했다가 실측하고 1.272 를 더했다(2026-08-09) —
+ * 1.618 단독은 계열 10종에서 1000봉당 2~13회로 발화율 하한(5)을 밑돌았다.
+ */
+export const EXTENSION_RATIOS = [1.272, 1.618]
 
 const RETRACE: Array<{ id: string; ratio: number; strength: 1 | 2 | 3 }> = [
   { id: 'fib_retrace_382', ratio: 0.382, strength: 1 },
@@ -70,6 +73,18 @@ export function detectFibonacci(cs: Candle[]): Signal[] {
   const pivots = findPivots(cs, 2)
   const a = atr(cs, 14)
 
+  /**
+   * 레그별로 이미 낸 레벨을 기억한다 — **한 레그에서 한 레벨은 한 번만 사건이다.**
+   *
+   * 사람이 피보를 그리면 "처음 61.8% 에 닿았다" 가 사건이지, 그 근처에 머무는 매 봉이
+   * 사건은 아니다. 레그를 봉마다 다시 고르는 구조라 이 억제가 없으면 가격이 레벨 근처를
+   * 오가는 동안 계속 발화한다 — 실측에서 1000봉당 102~239회로 상한(150)을 넘었다.
+   *
+   * 키가 레그(확정 피벗 두 개)와 레벨로만 이뤄지므로 인과적이다. 잘린 실행도 같은
+   * 순서로 재생하니 같은 봉에서 같은 첫 터치를 찾는다.
+   */
+  const fired = new Set<string>()
+
   // 중첩 판정용 수급 구간. 같은 계층이라 의존 방향 위반이 아니고, 두 감지기 다
   // 인과적이라 미래참조도 없다.
   const zones = [...detectOrderBlocks(cs), ...detectFVG(cs)]
@@ -92,10 +107,20 @@ export function detectFibonacci(cs: Candle[]): Signal[] {
       price >= z.refs!.priceLow! && price <= z.refs!.priceHigh!)
 
     let confluenceAt: { level: number; ratio: number } | undefined
+    /** 이 레그를 가리키는 키. 확정 피벗 두 개로만 이뤄져 인과적이다 */
+    const legKey = `${start.pivotBar}|${end.pivotBar}`
+    /** 이 레그에서 이 레벨을 처음 건드리는가 */
+    const firstTouch = (levelId: string): boolean => {
+      const k = `${legKey}|${levelId}`
+      if (fired.has(k)) return false
+      fired.add(k)
+      return true
+    }
 
     for (const r of RETRACE) {
       const level = up ? end.price - r.ratio * range : end.price + r.ratio * range
       if (!touches(c, level)) continue
+      if (!firstTouch(r.id)) continue
       out.push({
         id: r.id, tier: 3, kind: 'fib', side,
         barIndex: i, confidence: 'A', strength: r.strength,
@@ -105,6 +130,8 @@ export function detectFibonacci(cs: Candle[]): Signal[] {
       // 가장 깊은 되돌림 하나만 중첩 후보로 삼는다 — 봉당 하나만 낸다
       if (!confluenceAt && inZone(level)) confluenceAt = { level, ratio: r.ratio }
     }
+
+    if (confluenceAt && !firstTouch('confluence')) confluenceAt = undefined
 
     if (confluenceAt) {
       out.push({
@@ -123,16 +150,21 @@ export function detectFibonacci(cs: Candle[]): Signal[] {
     }
 
     // 확장은 레그 시작점에서 방향대로 잰다 — 레그 끝을 넘어선 목표다.
-    const ext = up ? start.price + EXTENSION_RATIO * range : start.price - EXTENSION_RATIO * range
-    if (touches(c, ext)) {
+    // 여러 비율이 같은 봉에서 동시에 닿을 수 있으나 태그는 하나뿐이므로, 먼저 닿는
+    // 가까운 비율부터 보고 그 레그에서 한 번만 낸다.
+    for (const ratio of EXTENSION_RATIOS) {
+      const ext = up ? start.price + ratio * range : start.price - ratio * range
+      if (!touches(c, ext)) continue
+      if (!firstTouch(`ext_${ratio}`)) continue
       out.push({
         id: 'fib_extension', tier: 3, kind: 'fib',
         // 목표 도달은 레그 방향과 같은 편이다
         side: up ? 'bullish' : 'bearish',
         barIndex: i, confidence: 'A', strength: 2,
-        evidence: `${legText} 의 ${(EXTENSION_RATIO * 100).toFixed(1)}% 확장 ${fmtPrice(ext)} 도달`,
+        evidence: `${legText} 의 ${(ratio * 100).toFixed(1)}% 확장 ${fmtPrice(ext)} 도달`,
         refs: { price: ext, fromBar: start.pivotBar, toBar: end.pivotBar },
       })
+      break
     }
   }
 
