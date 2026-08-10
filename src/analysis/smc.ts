@@ -129,8 +129,13 @@ export function detectOrderBlocks(cs: Candle[]): Signal[] {
   return mergeOverlappingOrderBlocks(out)
 }
 
-/** i 시점에 이미 확정된 피벗 중 가장 최근 것 */
-function lastConfirmedPivot(pivots: Pivot[], i: number, kind: 'high' | 'low'): Pivot | undefined {
+/**
+ * i 시점에 이미 확정된 피벗 중 가장 최근 것.
+ *
+ * 인과성의 핵심 조각이라 fibonacci.ts 도 같은 것을 쓴다 — 관측 시점까지 확정된
+ * 피벗만 보게 만드는 것이 미래참조를 막는 유일한 방법이다.
+ */
+export function lastConfirmedPivot(pivots: Pivot[], i: number, kind: 'high' | 'low'): Pivot | undefined {
   let found: Pivot | undefined
   for (const p of pivots) {
     if (p.kind !== kind) continue
