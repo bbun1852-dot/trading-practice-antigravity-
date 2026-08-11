@@ -10,6 +10,7 @@ import { detectFibonacci } from './fibonacci'
 import { detectIndicatorExtras } from './indicatorExtras'
 import { detectSmcExtras } from './smcExtras'
 import { detectStructureExtras } from './structureExtras'
+import { detectTrendline } from './trendline'
 
 const DETECTORS = [
   detectTrend,
@@ -25,6 +26,7 @@ const DETECTORS = [
   detectIndicatorExtras,
   detectSmcExtras,
   detectStructureExtras,
+  detectTrendline,
 ]
 
 /** 주어진 캔들 배열 전체에 대해 모든 감지기를 돌린다 */

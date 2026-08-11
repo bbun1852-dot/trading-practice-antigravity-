@@ -452,8 +452,16 @@ describe('헛다리 감점의 confidence 차등 — A 100% / B 50% / C 0%', () =
     expect(TAG_BY_ID.has('tmp_a1')).toBe(false)
   })
 
-  it('현재 taxonomy 는 전부 A 다 — B·C 는 Part 3 에서 들어온다', () => {
-    expect([...TAG_BY_ID.values()].every((d) => d.confidence === 'A')).toBe(true)
+  /**
+   * Part 2 가 "현재 taxonomy 는 전부 A 다 — B·C 는 나중에 들어온다" 로 심어 둔
+   * 자리다. Part 5 에서 추세선 5종이 B 로 들어오며 그 전제가 깨졌고, 이제는
+   * **A 와 B 가 공존한다**는 것을 고정한다. C 는 아직 없다(와이코프·하모닉 파트).
+   */
+  it('A 와 B 가 공존하고 C 는 아직 없다', () => {
+    const grades = new Set([...TAG_BY_ID.values()].map((d) => d.confidence))
+    expect(grades.has('A')).toBe(true)
+    expect(grades.has('B')).toBe(true)
+    expect(grades.has('C')).toBe(false)
   })
 })
 
@@ -648,6 +656,33 @@ describe('grade — 성립하지 않는 주문', () => {
       direction: 'long', entry: 112.91, stopLoss: 107, takeProfit: 118, tags: [],
     })
     expect(r.execution.orderValid).toBe(true)
+  })
+})
+
+/**
+ * Part 5 게이트 7 — B등급 경로가 실제로 켜졌는지 고정한다.
+ *
+ * CONFIDENCE_FACTOR 는 Part 2 에서 만들어졌지만 Part 4 까지 **모든 태그가 A등급이라
+ * 한 번도 실행되지 않았다.** 추세선 5종이 첫 B등급 소비자다. 이 검사가 없으면
+ * "B 를 도입했는데 감점이 그대로였다" 를 아무도 모른다.
+ */
+describe('confidence 등급별 감점 차등', () => {
+  it('B등급 헛다리는 A등급의 절반만 깎는다', () => {
+    const a = falseClaimPenalty('liq_sweep_low')       // A등급
+    const b = falseClaimPenalty('trendline_support')   // B등급
+    expect(a).toBe(FALSE_CLAIM_PENALTY)
+    expect(b).toBe(FALSE_CLAIM_PENALTY / 2)
+  })
+
+  it('추세선 5종이 전부 B등급이다', () => {
+    for (const id of ['trendline_support', 'trendline_resistance', 'trendline_break',
+      'channel_upper', 'channel_lower']) {
+      expect(TAG_BY_ID.get(id)?.confidence, `${id} 가 B등급이 아니다`).toBe('B')
+    }
+  })
+
+  it('taxonomy 에 없는 id 는 A로 본다 — 확인할 방법이 없는 주장이 가장 센 헛다리다', () => {
+    expect(falseClaimPenalty('존재하지_않는_태그')).toBe(FALSE_CLAIM_PENALTY)
   })
 })
 

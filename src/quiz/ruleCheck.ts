@@ -119,6 +119,12 @@ const MA_CROSS_UNSCORED = ['ma_golden_cross', 'ma_dead_cross']
  */
 const MA_TOUCH_UNSCORED = ['ma_support', 'ma_resistance']
 
+/** Part 5 에서 감지기가 생겼다. 스윙 시트의 '추세선' 행이 이걸로 살아난다 */
+const TRENDLINE = [
+  'trendline_support', 'trendline_resistance', 'trendline_break',
+  'channel_upper', 'channel_lower',
+]
+
 /** Part 3 에서 감지기가 생겼다. 스윙 시트의 '피보나치' 행이 이걸로 살아난다 */
 const FIB = ['fib_retrace_382', 'fib_retrace_5', 'fib_retrace_618', 'fib_extension', 'fib_confluence']
 
@@ -164,7 +170,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
     // 진입 근거로 쓰지 않는다는 뜻이라, 있는 그대로 미배점으로 둔다.
     // 단타 시트에는 피보나치 행도 없다 — 1~15분봉에서 되돌림 레벨을 진입 근거로
     // 쓰지 않는다는 뜻이라, MA·OBV 와 같은 방식으로 미배점에 둔다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...TRENDLINE, ...VOLUME_NODE_UNSCORED],
   },
   swing: {
     id: 'swing',
@@ -181,7 +187,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('volume', '거래량 (Volume)', 4, false, VOLUME),
       r('obv', 'OBV 누적 수급', 3, false, OBV),
       r('ma_align', '이동평균 배열 (MA)', 3, false, MA_ALIGN),
-      r('trendline', '추세선 (Trendline)', 2, false, []),  // 감지기 미구현 (Part 3)
+      r('trendline', '추세선 (Trendline)', 2, false, TRENDLINE),  // Part 5 에서 살아났다
       r('fibonacci', '피보나치 (Fibonacci)', 2, false, FIB),  // Part 3 에서 살아났다
       r('bollinger', '볼린저 밴드', 3, false, BOLLINGER),
       r('rsi', 'RSI 지표', 2, false, RSI),
@@ -211,7 +217,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('candle', '거시 캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
     // 장기 시트에도 피보나치 행이 없다. 스윙 시트에만 있다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...FIB, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...FIB, ...TRENDLINE, ...VOLUME_NODE_UNSCORED],
   },
 }
 
