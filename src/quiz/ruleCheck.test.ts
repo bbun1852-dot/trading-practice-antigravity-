@@ -104,9 +104,9 @@ describe('태그 커버리지', () => {
   it('감지기가 없는 항목의 배점 합을 보고한다', () => {
     // 스윙: 차트패턴 4. 장기: 차트패턴 5.
     // Part 3 에서 피보나치 행(2점), Part 5 에서 추세선 행(2점)이 살아났다 —
-    // 8 → 6 → 4 로 내려왔다. 남은 것은 차트패턴뿐이다.
-    expect(ruleCheck([], '4h').dormantWeight).toBe(4)
-    expect(ruleCheck([], '1d').dormantWeight).toBe(5)
+    // 8 → 6 → 4 로 내려왔다. 이번에 차트패턴 16종도 추가되면서 마침내 모든 감지기가 채워졌다.
+    expect(ruleCheck([], '4h').dormantWeight).toBe(0)
+    expect(ruleCheck([], '1d').dormantWeight).toBe(0)
     expect(ruleCheck([], '15m').dormantWeight).toBe(0)
   })
 })

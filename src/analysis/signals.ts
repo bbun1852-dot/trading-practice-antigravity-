@@ -11,6 +11,9 @@ import { detectIndicatorExtras } from './indicatorExtras'
 import { detectSmcExtras } from './smcExtras'
 import { detectStructureExtras } from './structureExtras'
 import { detectTrendline } from './trendline'
+import { detectChartPatterns } from './chartPatterns'
+import { detectWyckoff } from './wyckoff'
+import { detectHTF } from './htf'
 
 const DETECTORS = [
   detectTrend,
@@ -27,6 +30,9 @@ const DETECTORS = [
   detectSmcExtras,
   detectStructureExtras,
   detectTrendline,
+  detectChartPatterns,
+  detectWyckoff,
+  detectHTF,
 ]
 
 /** 주어진 캔들 배열 전체에 대해 모든 감지기를 돌린다 */

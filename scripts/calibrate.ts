@@ -31,7 +31,7 @@ const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'LINKUSDT']
 const TFS: Timeframe[] = ['4h', '1d']
 
 const MEDIAN_MIN = 8
-const MEDIAN_MAX = 15
+const MEDIAN_MAX = 18
 
 /**
  * 데이터 창의 끝을 고정한다 (2026-08-01T00:00:00Z).

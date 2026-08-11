@@ -42,7 +42,7 @@ export const PROCESS_MAX = EVIDENCE_MAX + EXECUTION_MAX
  * 태그 수 이상이 되어 참고가 통째로 사라지는 문제의 비율이 K=5 에서 0.0%,
  * K=6 에서 4.8%, K=8 에서 29.8% 다. K=5 는 모든 문제에서 참고 계층이 살아 있다.
  */
-export const DEFAULT_CORE_K = 5
+export const DEFAULT_CORE_K = 6
 
 /** 헛다리 하나당 기본 감점 (confidence A 기준) */
 export const FALSE_CLAIM_PENALTY = 3
