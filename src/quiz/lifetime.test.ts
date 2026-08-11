@@ -19,13 +19,15 @@ describe('수명 클래스', () => {
     expect(filterActive(cs, s, 21)).toEqual([])
   })
 
-  // Task 5 실측으로 recent 가 두 단이 됐다: 구조·SMC 사건 14봉, 지표의 순간 사건 4봉.
-  // 아래 두 테스트는 각 단의 경계를 정확한 값으로 고정한다.
-  it('recent(구조계): 14봉 이내만 유효하다', () => {
+  // Task 5 실측으로 recent 가 두 단이 됐다: 구조·SMC 사건과 지표의 순간 사건.
+  // 아래 두 테스트는 각 단의 경계를 **리터럴로** 고정한다 — 상수를 그대로 참조하면
+  // 값이 바뀔 때 검사도 함께 따라 내려가 아무것도 지키지 못한다.
+  // Part 4 재확정: 구조계 14 → 10 (태그가 71종이 되며 유효 근거가 대역을 벗어났다).
+  it('recent(구조계): 10봉 이내만 유효하다', () => {
     const cs = flat(40)
     const s = [sig('liq_sweep_low', 20, { tier: 1, kind: 'smc' })]
-    expect(filterActive(cs, s, 33)).toHaveLength(1)   // ageBars 13 < 14
-    expect(filterActive(cs, s, 34)).toHaveLength(0)   // ageBars 14
+    expect(filterActive(cs, s, 29)).toHaveLength(1)   // ageBars 9 < 10
+    expect(filterActive(cs, s, 30)).toHaveLength(0)   // ageBars 10
   })
 
   // ma_aligned_bull 은 리뷰 finding 2 에서 bar 로 재분류됐다 (매봉 재평가되는
@@ -124,13 +126,14 @@ describe('수명 클래스', () => {
     expect(filterActive(cs, s, 25)).toHaveLength(1)   // bearish 는 위로 뚫려야 깨진다
   })
 
+  // Part 4 재확정: zone maxBars 50 → 30 (오더블록 2종이 유효 근거의 23% 를 차지했다).
   it('zone: maxBars 를 넘으면 무효', () => {
     const cs = flat(200)
     const s = [sig('ob_bull_support', 20, {
       tier: 1, kind: 'smc', refs: { priceLow: 95, priceHigh: 99 },
     })]
-    expect(filterActive(cs, s, 69)).toHaveLength(1)    // ageBars 49
-    expect(filterActive(cs, s, 71)).toHaveLength(0)    // ageBars 51 > 50
+    expect(filterActive(cs, s, 49)).toHaveLength(1)    // ageBars 29
+    expect(filterActive(cs, s, 51)).toHaveLength(0)    // ageBars 31 > 30
   })
 
   it('taxonomy 에 없는 id 는 버린다', () => {

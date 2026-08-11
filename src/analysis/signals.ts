@@ -7,6 +7,9 @@ import { detectDivergence } from './divergence'
 import { detectIndicatorSignals } from './indicatorSignals'
 import { detectVolumeNodes } from './volumeProfile'
 import { detectFibonacci } from './fibonacci'
+import { detectIndicatorExtras } from './indicatorExtras'
+import { detectSmcExtras } from './smcExtras'
+import { detectStructureExtras } from './structureExtras'
 
 const DETECTORS = [
   detectTrend,
@@ -19,6 +22,9 @@ const DETECTORS = [
   detectIndicatorSignals,
   detectVolumeNodes,
   detectFibonacci,
+  detectIndicatorExtras,
+  detectSmcExtras,
+  detectStructureExtras,
 ]
 
 /** 주어진 캔들 배열 전체에 대해 모든 감지기를 돌린다 */

@@ -46,7 +46,7 @@ export const DEFAULT_MERGE_WINDOW = 20
  * 주는 양이 줄어도 실질 손해가 없다. scanner.test.ts 가 "2단계 결과 == 전수 정확
  * 스캔" 을 회귀로 고정한다.
  */
-export const COARSE_SLACK = 60
+export const COARSE_SLACK = 80
 
 const SWEEP_IDS = new Set(['liq_sweep_low', 'liq_sweep_high'])
 const ORDER_BLOCK_IDS = new Set(['ob_bull_support', 'ob_bear_resistance'])

@@ -23,6 +23,14 @@ export const LOOKBACK = 20
 export const ABSORPTION_VOL_MULT = 2
 /** 흡수: 몸통이 레인지의 이 비율 미만 */
 export const ABSORPTION_BODY_MAX = 0.3
+/**
+ * 히스토그램 전환으로 인정할 최소 깊이 — 최근 창 최대 진폭 대비 비율.
+ *
+ * 이게 없으면 0선 근처의 잔물결이 전부 전환으로 잡힌다(실측: 결정 시점 400개에서
+ * 유효 출현 270회로 신규 태그 중 최다였다). 모멘텀이 실제로 꺾였다고 부르려면
+ * 그 저점/천장이 최근 움직임에 견줘 의미 있는 깊이여야 한다.
+ */
+export const HIST_TURN_MIN_FRAC = 0.3
 
 function sig(
   id: string, tier: Tier, kind: SignalKind, side: SignalSide,
@@ -115,11 +123,19 @@ export function detectIndicatorExtras(cs: Candle[]): Signal[] {
     // 부호 전환(macd_zero_break)이 아니라 **기울기 전환**이다. i-1 이 국소 극값이고
     // i 에서 확정된다. 0선 반대편에 있을 때만 본다 — 추세 중간의 잔물결을 거른다.
     if (i >= 2 && Number.isFinite(hist[i]) && Number.isFinite(hist[i - 1]) && Number.isFinite(hist[i - 2])) {
-      if (hist[i - 2] > hist[i - 1] && hist[i - 1] < hist[i] && hist[i - 1] < 0) {
+      // 최근 창의 최대 진폭에 견줘 얕은 전환은 잔물결이지 모멘텀 전환이 아니다
+      let amp = 0
+      for (let k = Math.max(0, i - LOOKBACK); k <= i; k++) {
+        const h = Math.abs(hist[k])
+        if (Number.isFinite(h) && h > amp) amp = h
+      }
+      const deep = amp > 0 && Math.abs(hist[i - 1]) >= HIST_TURN_MIN_FRAC * amp
+
+      if (deep && hist[i - 2] > hist[i - 1] && hist[i - 1] < hist[i] && hist[i - 1] < 0) {
         out.push(sig('macd_hist_turn', 4, 'momentum', 'bullish', i,
           `MACD 히스토그램이 ${fmtPrice(hist[i - 1])} 에서 바닥을 찍고 반등 — 하락 모멘텀 둔화`, 2))
       }
-      if (hist[i - 2] < hist[i - 1] && hist[i - 1] > hist[i] && hist[i - 1] > 0) {
+      if (deep && hist[i - 2] < hist[i - 1] && hist[i - 1] > hist[i] && hist[i - 1] > 0) {
         out.push(sig('macd_hist_turn', 4, 'momentum', 'bearish', i,
           `MACD 히스토그램이 ${fmtPrice(hist[i - 1])} 에서 천장을 찍고 하락 — 상승 모멘텀 둔화`, 2))
       }

@@ -71,20 +71,26 @@ export type ProfileDef = {
 // 점수는 신호 개수가 아니라 **항목 단위로 한 번** 매긴다 — 오더블록이 세 개 살아 있어도
 // "오더블럭" 행은 배점 한 번이다.
 
-const SWEEP = ['liq_sweep_low', 'liq_sweep_high']
-const FVG = ['fvg_bull', 'fvg_bear']
-const ORDER_BLOCK = ['ob_bull_support', 'ob_bear_resistance']
+// Part 4 에서 각 행에 태그가 더해졌다. 엑셀의 **행 구성은 그대로**이고 그 행이 무엇으로
+// 채워지는지만 넓어진 것이다 — 없는 행을 새로 만들지 않는다.
+const SWEEP = ['liq_sweep_low', 'liq_sweep_high', 'liq_pool_untapped']
+const FVG = ['fvg_bull', 'fvg_bear', 'fvg_rebalance']
+const ORDER_BLOCK = ['ob_bull_support', 'ob_bear_resistance', 'ob_double_engulfing']
 const STRUCTURE = [
   'trend_up_structure', 'trend_down_structure', 'trend_range',
   'msb_bull', 'msb_bear',
+  'choch', 'sr_flip', 'retest_success', 'retest_fail',
 ]
-const VOLUME = ['vol_breakout_confirm', 'vol_breakout_weak', 'vol_climax']
-const BOLLINGER = ['bb_squeeze', 'bb_break_upper', 'bb_break_lower']
+const VOLUME = [
+  'vol_breakout_confirm', 'vol_breakout_weak', 'vol_climax',
+  'vol_divergence', 'vol_absorption',
+]
+const BOLLINGER = ['bb_squeeze', 'bb_break_upper', 'bb_break_lower', 'bb_walking']
 const RSI = [
   'rsi_overbought', 'rsi_oversold', 'rsi_50_break',
-  'rsi_bull_div', 'rsi_bear_div', 'rsi_hidden_div',
+  'rsi_bull_div', 'rsi_bear_div', 'rsi_hidden_div', 'rsi_failure_swing',
 ]
-const MACD = ['macd_golden', 'macd_dead', 'macd_zero_break', 'macd_divergence']
+const MACD = ['macd_golden', 'macd_dead', 'macd_zero_break', 'macd_divergence', 'macd_hist_turn']
 const CANDLE = [
   'candle_hammer', 'candle_inv_hammer', 'candle_shooting_star', 'candle_doji',
   'candle_bull_engulf', 'candle_bear_engulf', 'candle_bull_harami', 'candle_bear_harami',
@@ -92,7 +98,7 @@ const CANDLE = [
   'candle_tri_star', 'tweezer_top', 'tweezer_bottom', 'candle_inside_bar',
 ]
 const WICK = ['candle_long_wick']
-const OBV = ['obv_divergence']
+const OBV = ['obv_divergence', 'obv_trend_confirm']
 const MA_ALIGN = ['ma_aligned_bull', 'ma_aligned_bear']
 
 /**
@@ -103,6 +109,15 @@ const MA_ALIGN = ['ma_aligned_bull', 'ma_aligned_bear']
  * 판단이었고(2026-08-06), 엑셀도 크로스 행을 따로 두지 않았다.
  */
 const MA_CROSS_UNSCORED = ['ma_golden_cross', 'ma_dead_cross']
+
+/**
+ * 이동평균 지지·저항 — 크로스와 같은 이유로 세 프로파일 어디에도 행이 없다.
+ *
+ * 엑셀의 MA 행은 "완벽한 정배열/역배열" 이라고 **배열만** 지목한다. 가격이 EMA50 을
+ * 찍고 되돌아가는 것은 배열이 아니라 그 순간의 상호작용이라 그 행에 넣을 수 없고,
+ * 넣으면 배열을 짚은 답과 터치를 짚은 답이 같은 점수를 받는다.
+ */
+const MA_TOUCH_UNSCORED = ['ma_support', 'ma_resistance']
 
 /** Part 3 에서 감지기가 생겼다. 스윙 시트의 '피보나치' 행이 이걸로 살아난다 */
 const FIB = ['fib_retrace_382', 'fib_retrace_5', 'fib_retrace_618', 'fib_extension', 'fib_confluence']
@@ -149,7 +164,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
     // 진입 근거로 쓰지 않는다는 뜻이라, 있는 그대로 미배점으로 둔다.
     // 단타 시트에는 피보나치 행도 없다 — 1~15분봉에서 되돌림 레벨을 진입 근거로
     // 쓰지 않는다는 뜻이라, MA·OBV 와 같은 방식으로 미배점에 둔다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...VOLUME_NODE_UNSCORED],
   },
   swing: {
     id: 'swing',
@@ -173,7 +188,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('macd', 'MACD 지표', 2, false, MACD),
       r('candle', '캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
-    unscored: [...MA_CROSS_UNSCORED, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...VOLUME_NODE_UNSCORED],
   },
   position: {
     id: 'position',
@@ -196,7 +211,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('candle', '거시 캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
     // 장기 시트에도 피보나치 행이 없다. 스윙 시트에만 있다.
-    unscored: [...MA_CROSS_UNSCORED, ...FIB, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...FIB, ...VOLUME_NODE_UNSCORED],
   },
 }
 
