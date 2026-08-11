@@ -56,7 +56,25 @@ const WEIGHT: Record<string, number> = {
 
   // Part 4 신규 15종. 그룹은 위 표를 그대로 따른다 — 4점은 구조·유동성·FVG·거래량,
   // 3점은 수급·기하, 2점은 모멘텀이다.
-  choch: 4, sr_flip: 4, retest_success: 4, retest_fail: 4,
+  /**
+   * **choch 만 2점이다 — 구조 붕괴가 아니라 그 붕괴에 붙는 수식어이기 때문이다.**
+   *
+   * 실측(2026-08-10, 심볼 5종 × 4h/1d): choch 248회 중 243회(98.0%)가 msb_* 와
+   * 같은 봉에서 났다. 개념상 당연하다 — SMC 에서 BOS 와 CHoCH 는 같은 붕괴에 붙는
+   * 상호배타적 라벨(연속이냐 반전이냐)인데, detectMSB 가 모든 붕괴를 이미 MSB 로
+   * 라벨링하므로 choch 는 그 위에 얹히는 두 번째 라벨이 된다.
+   *
+   * 4점으로 두면 한 번의 구조 붕괴가 choch(4) + msb_*(2) = 6점을 받아, 가장 흔한
+   * 구조 사건에서 점수가 부푼다. 2점이면 합이 4점이 되어 "구조가 깨졌고 그것이
+   * 추세를 거슬렀다" 에 걸맞다.
+   *
+   * 같은 봉의 msb_* 를 억제하는 방식도 검토했으나 그러면 choch 가 10계열 통틀어
+   * 5회만 남아 사실상 죽는다 — 독립적인 신호가 거의 없다는 것이 실측 결론이다.
+   * 제대로 가르려면 detectMSB 를 BOS/CHoCH 로 갈라 내야 하고, 그건 Part 1 감지기를
+   * 건드리는 별도 파트다.
+   */
+  choch: 2,
+  sr_flip: 4, retest_success: 4, retest_fail: 4,
   liq_pool_untapped: 4, fvg_rebalance: 4,
   vol_divergence: 4, vol_absorption: 4,
   // 오더블록 계열이므로 오더블록과 같은 3점이다. 단독 오더블록보다 강한 흔적이지만
