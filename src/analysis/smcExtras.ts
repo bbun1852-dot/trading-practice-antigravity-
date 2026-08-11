@@ -19,8 +19,14 @@ import { fmtPrice } from '../format'
 
 /** 등고점/등저점으로 볼 허용오차 (ATR 배수) */
 export const POOL_TOL_ATR = 0.25
-/** FVG 로 접근 중이라고 볼 최대 거리 (ATR 배수) */
-export const REBALANCE_NEAR_ATR = 1.5
+/**
+ * FVG 로 접근 중이라고 볼 최대 거리 (ATR 배수).
+ *
+ * 1.5 로 두니 1000봉당 2~10회로 하한(5)을 밑돌았다 — 갭이 사거리에 들어오는 순간
+ * 종가가 마침 그쪽으로 움직인 봉이어야 해서 조건이 두 겹으로 좁았다. 자석 효과는
+ * 그보다 먼 거리에서도 성립하므로 사거리를 넓힌다.
+ */
+export const REBALANCE_NEAR_ATR = 3
 /** 이보다 오래된 FVG 는 자석으로 보지 않는다 */
 export const REBALANCE_MAX_AGE = 50
 
@@ -47,7 +53,10 @@ export function detectSmcExtras(cs: Candle[]): Signal[] {
     const a2 = cs[p - 2]
     const lo = Math.min(bodyLo(a1), bodyLo(a2))
     const hi = Math.max(bodyHi(a1), bodyHi(a2))
-    if (bodyLo(c) > lo || bodyHi(c) < hi) continue
+    // 몸통 대 몸통으로 재면 1000봉당 4~12회로 하한(5)을 밑돌았다. 장악의 통상적
+    // 판정은 **삼킨 봉의 전 범위**가 앞 몸통들을 덮었는가이므로 레인지로 잰다 —
+    // 조건을 바꾼 것이 아니라 원래 뜻에 맞춘 것이다.
+    if (c.low > lo || c.high < hi) continue
     out.push({
       id: 'ob_double_engulfing', tier: 1, kind: 'smc', side: ob.side,
       barIndex: ob.barIndex, confidence: 'A', strength: 3,
@@ -133,11 +142,14 @@ export function detectSmcExtras(cs: Candle[]): Signal[] {
       const prev = cs[i - 1]
       if (c.low <= hi && c.high >= lo) break        // 이미 닿았다 — 리밸런스 완료
 
+      // **사거리에 들어온 것 자체가 사건이다.** 처음에는 "그 봉에서 종가가 갭 쪽으로
+      // 움직였을 것" 까지 겹으로 요구했는데, 대상 갭이 애초에 적어서(detectFVG 는 끝내
+      // 안 메워진 갭만 낸다) 1000봉당 2~10회로 하한을 밑돌았다. 자석은 다가가는 한 봉의
+      // 방향이 아니라 거리가 정하므로, 조건을 원래 뜻으로 되돌린다.
       const below = c.close < lo
-      const approaching = below
-        ? c.close > prev.close && lo - c.close <= near
-        : c.close < prev.close && c.close - hi <= near
-      if (!approaching) continue
+      const dist = below ? lo - c.close : c.close - hi
+      if (dist > near) continue
+      void prev
 
       rebalanceFired.add(f.barIndex)
       rebalance.push({

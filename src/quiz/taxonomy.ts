@@ -163,7 +163,16 @@ export const TAGS: TagDef[] = [
   t('retest_success', '리테스트 성공', 1, 'structure', recent(RECENT_STRUCTURAL)),
   t('retest_fail', '리테스트 실패 (페이크아웃)', 1, 'structure', recent(RECENT_STRUCTURAL)),
   t('liq_pool_untapped', '미체결 유동성 구간 존재', 1, 'smc', recent(RECENT_STRUCTURAL)),
-  t('ob_double_engulfing', '이중장악형 오더블록', 1, 'smc', zone(ZONE_MAX_BARS, 'close_through')),
+  /**
+   * 구간이 아니라 **성질 표시**라 zone 이 아니다.
+   *
+   * 처음엔 오더블록과 같은 zone(30) 을 줬는데, 이 태그는 언제나 ob_bull_support /
+   * ob_bear_resistance 와 같은 봉에서 함께 난다(같은 오더블록을 가리키므로 당연하다).
+   * 구간을 두 태그가 나란히 들고 있으면 같은 자리가 두 겹으로 쌓여 유효 근거가
+   * 부푼다 — 구간은 ob_* 가 들고, 이쪽은 "그 오더블록이 이중장악이었다" 는 사실만
+   * 짧게 남긴다.
+   */
+  t('ob_double_engulfing', '이중장악형 오더블록', 1, 'smc', recent(RECENT_MOMENTARY)),
 
   // ── Tier 2 ──
   // FVG는 detectFVG가 이미 미충족만 배출하므로 zone이 아니라 recent다 (스펙 2.3)

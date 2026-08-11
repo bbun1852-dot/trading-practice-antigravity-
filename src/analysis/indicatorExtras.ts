@@ -19,6 +19,14 @@ import { fmtPrice } from '../format'
 export const WALK_RUN = 3
 /** 최근성 판정에 쓰는 창 */
 export const LOOKBACK = 20
+/**
+ * OBV 추세 확인의 창은 더 길다.
+ *
+ * 20봉으로 두니 1000봉당 116~154회로 상한(150)을 넘었다 — 20봉 신고점은 추세장에서
+ * 거의 매번 갱신되므로 "확인" 이라 부를 만큼 드물지 않다. 창을 늘리면 그만큼 의미
+ * 있는 갱신만 남는다.
+ */
+export const OBV_LOOKBACK = 40
 /** 흡수: 거래량이 평균의 이 배 이상 */
 export const ABSORPTION_VOL_MULT = 2
 /** 흡수: 몸통이 레인지의 이 비율 미만 */
@@ -172,13 +180,22 @@ export function detectIndicatorExtras(cs: Candle[]): Signal[] {
       const newHigh = cl[i] > maxC
       const newLow = cl[i] < minC
 
-      if (newHigh && o[i] > maxO) {
-        out.push(sig('obv_trend_confirm', 4, 'volume', 'bullish', i,
-          `종가와 OBV 가 동시에 최근 ${LOOKBACK}봉 신고점 — 수급이 가격을 따라온다`, 3))
-      }
-      if (newLow && o[i] < minO) {
-        out.push(sig('obv_trend_confirm', 4, 'volume', 'bearish', i,
-          `종가와 OBV 가 동시에 최근 ${LOOKBACK}봉 신저점 — 수급이 가격을 따라온다`, 3))
+      if (i >= OBV_LOOKBACK) {
+        let mxC = -Infinity, mnC = Infinity, mxO = -Infinity, mnO = Infinity
+        for (let k = i - OBV_LOOKBACK; k < i; k++) {
+          if (cl[k] > mxC) mxC = cl[k]
+          if (cl[k] < mnC) mnC = cl[k]
+          if (o[k] > mxO) mxO = o[k]
+          if (o[k] < mnO) mnO = o[k]
+        }
+        if (cl[i] > mxC && o[i] > mxO) {
+          out.push(sig('obv_trend_confirm', 4, 'volume', 'bullish', i,
+            `종가와 OBV 가 동시에 최근 ${OBV_LOOKBACK}봉 신고점 — 수급이 가격을 따라온다`, 3))
+        }
+        if (cl[i] < mnC && o[i] < mnO) {
+          out.push(sig('obv_trend_confirm', 4, 'volume', 'bearish', i,
+            `종가와 OBV 가 동시에 최근 ${OBV_LOOKBACK}봉 신저점 — 수급이 가격을 따라온다`, 3))
+        }
       }
       if (volAvg > 0 && vol[i] < volAvg) {
         if (newHigh) {
