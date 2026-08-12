@@ -161,8 +161,10 @@ describe('coreSignals', () => {
     expect(coreSignals([...sigs].reverse(), 3).map((s) => s.id)).toEqual(forward)
   })
 
-  it('기본 K 는 실측으로 정한 5 다', () => {
-    expect(DEFAULT_CORE_K).toBe(5)
+  it('기본 K 는 실측으로 정한 6 이다', () => {
+    // Part 2 에서 5 로 정했다가 Part 6(태그 106종)에서 6 으로 올렸다. 태그가 늘면
+    // 같은 K 의 커버리지가 내려가 5 는 중앙 59.3% 로 대역(60~80) 밖으로 나간다.
+    expect(DEFAULT_CORE_K).toBe(6)
   })
 })
 
