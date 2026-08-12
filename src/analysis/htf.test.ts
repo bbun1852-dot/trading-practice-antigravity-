@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { detectHTF } from './htf'
-import type { Candle } from '../data/types'
 import { assertNoLookAhead } from './testing'
 import { synthCandles } from './fixtures'
 
@@ -10,34 +9,43 @@ describe('detectHTF', () => {
   })
 
   it('룩어헤드 편향이 없어야 한다', () => {
-    // 100봉 이상이어야 감지 로직이 도므로 400봉 정도로 테스트
-    const cs = synthCandles(400)
-    assertNoLookAhead(detectHTF, cs)
+    assertNoLookAhead(detectHTF, synthCandles(400))
   })
 
-  it('단순 상승 추세(HTF)에서 트렌드와 BOS를 감지해야 한다', () => {
-    const cs: Candle[] = []
-    
-    // 100봉을 채우되, HTF (4개씩 묶임) 관점에서 점진적 우상향하도록 구성
-    // HTF 캔들 1 (0~3): low=100, high=110, close=105
-    // HTF 캔들 2 (4~7): low=105, high=120, close=115
-    // HTF 캔들 3 (8~11): low=110, high=130, close=125
-    // ...
-    for (let i = 0; i < 200; i++) {
-      const basePrice = 100 + Math.floor(i / 4) * 5
-      cs.push({
-        time: i,
-        open: basePrice,
-        high: basePrice + 10,
-        low: basePrice - 2,
-        close: basePrice + 5,
-        volume: 100
-      })
-    }
+  /**
+   * 이 파트가 고친 결함을 고정한다. 고치기 전에는 조건이 참인 상위 봉마다 다시 내서
+   * 같은 방향이 연달아 수십 번 나왔다 (BTC 4h 1000봉당 91회, 간격 47/90 이 4봉).
+   * 정렬이 **바뀐 순간**에만 내면 방향은 반드시 번갈아 나온다.
+   */
+  it('htf_trend 는 정렬이 바뀔 때만 난다 — 같은 방향이 연달아 나오지 않는다', () => {
+    const trend = detectHTF(synthCandles(2000)).filter((s) => s.id === 'htf_trend')
+    expect(trend.length).toBeGreaterThan(0)
 
-    const out = detectHTF(cs)
-    
-    // 단순한 휴리스틱이므로 완벽한 감지를 장담하진 않지만, 실행 중 오류가 나지 않음을 우선 검증
-    expect(Array.isArray(out)).toBe(true)
+    for (let i = 1; i < trend.length; i++) {
+      expect(trend[i].side).not.toBe(trend[i - 1].side)
+    }
+  })
+
+  it('같은 자리는 두 번 짚지 않는다 — bos/poi 가 자리마다 한 번', () => {
+    const sigs = detectHTF(synthCandles(2000))
+    for (const id of ['htf_bos', 'htf_poi']) {
+      const keys = sigs.filter((s) => s.id === id).map((s) => `${s.side}|${s.refs?.pivotBar}`)
+      expect(new Set(keys).size).toBe(keys.length)
+    }
+  })
+
+  /**
+   * refs 는 사용자가 차트에 그릴 좌표다. Pivot.barIndex 는 확정 시점(pivotBar + n)이라
+   * 그걸 쓰면 실제 피벗보다 하위 8봉 뒤를 가리킨다 — 선이 엉뚱한 데서 시작한다.
+   */
+  it('refs 가 확정 시점이 아니라 실제 피벗 위치를 가리킨다', () => {
+    const sigs = detectHTF(synthCandles(2000))
+    expect(sigs.length).toBeGreaterThan(0)
+
+    for (const s of sigs) {
+      // 상위 봉 경계로 묶었으므로 하위 인덱스는 4의 배수여야 한다.
+      expect(s.refs?.fromBar! % 4).toBe(0)
+      expect(s.refs?.fromBar).toBeLessThanOrEqual(s.barIndex)
+    }
   })
 })
