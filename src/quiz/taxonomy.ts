@@ -95,12 +95,12 @@ const WEIGHT: Record<string, number> = {
   pattern_bull_pennant: 3, pattern_bear_pennant: 3,
   pattern_rectangle: 3,
 
-  // Part 7. 와이코프 11종 (Wyckoff). 복합 패턴이므로 3~4점.
+  // Part 6. 와이코프 11종. 복합 패턴이므로 3~4점.
   wyckoff_ps: 3, wyckoff_climax: 4, wyckoff_ar: 3, wyckoff_st: 3,
   wyckoff_spring_ut: 4, wyckoff_test: 3, wyckoff_sos_sow: 4,
   wyckoff_lps_lpsy: 3, wyckoff_bu: 3, wyckoff_utad: 4, wyckoff_shakeout: 4,
 
-  // Part 8. 상위 타임프레임 (HTF) 3종.
+  // Part 6. 상위 타임프레임(HTF) 3종.
   htf_trend: 3, htf_bos: 4, htf_poi: 4,
 
   rsi_failure_swing: 2, macd_hist_turn: 2, ma_support: 2, ma_resistance: 2,
@@ -284,20 +284,20 @@ export const TAGS: TagDef[] = [
   t('pattern_bear_pennant', '하락 페넌트 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('pattern_rectangle', '박스권 돌파 (직사각형)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
 
-  // ── Tier 3: 와이코프 11종 (Part 7) ──
+  // ── Tier 3: 와이코프 11종 (Part 6). 국면 라벨링이라 전부 B등급이다 ──
   t('wyckoff_ps', '와이코프 PS (예비 지지/저항)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
-  t('wyckoff_climax', '와이코프 SC/BC (클라이맥스)', 3, 'pattern', recent(RECENT_MOMENTARY), 'A'),
+  t('wyckoff_climax', '와이코프 SC/BC (클라이맥스)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('wyckoff_ar', '와이코프 AR (자동 랠리/반락)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('wyckoff_st', '와이코프 ST (2차 테스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
-  t('wyckoff_spring_ut', '와이코프 Spring/UT (스프링/업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'A'),
+  t('wyckoff_spring_ut', '와이코프 Spring/UT (스프링/업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('wyckoff_test', '와이코프 Test (테스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
-  t('wyckoff_sos_sow', '와이코프 SOS/SOW (강세/약세 신호)', 3, 'pattern', recent(RECENT_MOMENTARY), 'A'),
+  t('wyckoff_sos_sow', '와이코프 SOS/SOW (강세/약세 신호)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('wyckoff_lps_lpsy', '와이코프 LPS/LPSY (마지막 지지/저항)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('wyckoff_bu', '와이코프 BU/BUEC (백업)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
-  t('wyckoff_utad', '와이코프 UTAD (분배 후 업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'A'),
-  t('wyckoff_shakeout', '와이코프 Shakeout (터미널 쉐이크아웃)', 3, 'pattern', recent(RECENT_MOMENTARY), 'A'),
+  t('wyckoff_utad', '와이코프 UTAD (분배 후 업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_shakeout', '와이코프 Shakeout (터미널 쉐이크아웃)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
 
-  // ── Tier 3: 상위 타임프레임 3종 (HTF) (Part 8) ──
+  // ── Tier 3: 상위 타임프레임 3종 (Part 6). 4봉 묶음 합성이라 전부 B등급이다 ──
   t('htf_trend', '상위 타임프레임(HTF) 추세 정렬', 3, 'structure', recent(RECENT_STRUCTURAL), 'B'),
   t('htf_bos', '상위 타임프레임(HTF) 구조 붕괴', 3, 'structure', recent(RECENT_STRUCTURAL), 'B'),
   t('htf_poi', '상위 타임프레임(HTF) 주요 구간 진입 (POI)', 3, 'smc', recent(RECENT_STRUCTURAL), 'B'),

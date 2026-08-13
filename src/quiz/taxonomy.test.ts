@@ -106,6 +106,27 @@ describe('taxonomy 정합성', () => {
     ['wyckoff_shakeout', WYCKOFF_SYNTH_REASON],
   ])
 
+  /**
+   * 감지기가 내는 confidence 와 taxonomy 가 든 confidence 가 어긋나면 안 된다.
+   *
+   * 실제로 어긋나 있었다: 와이코프 감지기는 스스로를 휴리스틱이라며 'B'·'C' 를
+   * 냈는데 taxonomy 는 5종을 'A' 로 등재했다. falseClaimPenalty 는 taxonomy 만
+   * 읽으므로 감지기가 뭐라고 적든 조용히 무시되고, 사람마다 답이 갈리는 태그에
+   * A등급 만점 감점이 매겨졌다. 두 곳에 같은 사실이 적히는 한 이 검사가 필요하다.
+   */
+  it('감지기가 내는 등급과 taxonomy 의 등급이 같다', () => {
+    const mismatches = new Set<string>()
+    for (const seed of COVERAGE_SEEDS) {
+      for (const s of detectAll(synthCandles(COVERAGE_N, seed))) {
+        const want = TAG_BY_ID.get(s.id)?.confidence
+        if (want !== undefined && want !== s.confidence) {
+          mismatches.add(`${s.id}: 감지기 '${s.confidence}' vs taxonomy '${want}'`)
+        }
+      }
+    }
+    expect([...mismatches]).toEqual([])
+  })
+
   it('TAGS 의 모든 태그는 감지기가 실제로 배출하거나, 배출 불가 사유가 명시돼 있다', () => {
     // emitted ⊆ taxonomy 는 위에서 이미 검증했다. 여기서는 반대 방향 —
     // taxonomy ⊇ emitted, 즉 감지기 없는 유령 태그가 없는지 — 를 검증한다.

@@ -683,6 +683,29 @@ describe('confidence 등급별 감점 차등', () => {
     }
   })
 
+  /**
+   * Part 6 — 작도·라벨링 계열은 전부 B다.
+   *
+   * 와이코프 5종이 A등급으로 등재돼 있었는데 감지기는 스스로를 휴리스틱이라 표시하고
+   * 있었다(confidence 'B'·'C'). falseClaimPenalty 는 taxonomy 를 읽으므로, 국면
+   * 라벨링처럼 사람마다 답이 갈리는 태그에 A등급 만점 감점이 매겨지고 있었다.
+   *
+   * 와이코프는 어디부터를 TR 로 보느냐에 따라 답이 달라지고, HTF 는 진짜 상위
+   * 데이터가 아니라 4봉 묶음 합성이라 사용자가 실제 상위 차트에서 본 것과 다를 수
+   * 있다. 추세선과 같은 이유로 절반만 깎는다.
+   */
+  it('와이코프 11종과 HTF 3종이 전부 B등급이다', () => {
+    const ids = [
+      'wyckoff_ps', 'wyckoff_climax', 'wyckoff_ar', 'wyckoff_st', 'wyckoff_spring_ut',
+      'wyckoff_test', 'wyckoff_sos_sow', 'wyckoff_lps_lpsy', 'wyckoff_bu',
+      'wyckoff_utad', 'wyckoff_shakeout',
+      'htf_trend', 'htf_bos', 'htf_poi',
+    ]
+    for (const id of ids) {
+      expect(TAG_BY_ID.get(id)?.confidence, `${id} 가 B등급이 아니다`).toBe('B')
+    }
+  })
+
   it('taxonomy 에 없는 id 는 A로 본다 — 확인할 방법이 없는 주장이 가장 센 헛다리다', () => {
     expect(falseClaimPenalty('존재하지_않는_태그')).toBe(FALSE_CLAIM_PENALTY)
   })
