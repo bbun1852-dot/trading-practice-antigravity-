@@ -31,7 +31,13 @@ const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'LINKUSDT']
 const TFS: Timeframe[] = ['4h', '1d']
 
 const MEDIAN_MIN = 8
-const MEDIAN_MAX = 18
+/**
+ * **18 에서 15 로 되돌렸다 (Part 6).** 30종이 들어오며 ETHUSDT 4h 중앙값이 16 이 되자
+ * 천장이 15 → 18 로 올라갔는데, 그건 원인을 덮은 것이었다. 원인은 htf_trend 가 사건이
+ * 아니라 상태로 발화해 혼자 유효 근거의 5.8% 를 먹은 것이고, 그걸 고치니 대역이 비었다.
+ * 게이트를 움직여 통과시키면 그 다음 파트는 더 큰 값에서 같은 일을 한다.
+ */
+const MEDIAN_MAX = 15
 
 /**
  * 데이터 창의 끝을 고정한다 (2026-08-01T00:00:00Z).
