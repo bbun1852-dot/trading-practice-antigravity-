@@ -141,7 +141,7 @@ const CHART_PATTERN = [
   'pattern_double_top', 'pattern_double_bottom', 'pattern_triple_top', 'pattern_triple_bottom',
   'pattern_head_shoulders', 'pattern_inv_head_shoulders', 'pattern_sym_triangle', 'pattern_asc_triangle',
   'pattern_desc_triangle', 'pattern_rising_wedge', 'pattern_falling_wedge', 'pattern_rectangle',
-  'pattern_bull_flag', 'pattern_bear_flag', 'pattern_bull_pennant', 'pattern_bear_pennant'
+  'pattern_bull_flag', 'pattern_bear_flag', 'pattern_bear_pennant'
 ]
 
 /**

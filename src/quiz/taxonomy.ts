@@ -92,7 +92,7 @@ const WEIGHT: Record<string, number> = {
   pattern_sym_triangle: 3, pattern_asc_triangle: 3, pattern_desc_triangle: 3,
   pattern_rising_wedge: 3, pattern_falling_wedge: 3,
   pattern_bull_flag: 3, pattern_bear_flag: 3,
-  pattern_bull_pennant: 3, pattern_bear_pennant: 3,
+  pattern_bear_pennant: 3,
   pattern_rectangle: 3,
 
   // Part 6. 와이코프 11종. 복합 패턴이므로 3~4점.
@@ -280,7 +280,8 @@ export const TAGS: TagDef[] = [
   t('pattern_falling_wedge', '하락 쐐기형 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('pattern_bull_flag', '상승 플래그 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('pattern_bear_flag', '하락 플래그 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
-  t('pattern_bull_pennant', '상승 페넌트 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  // pattern_bull_pennant 은 등재하지 않는다 — 28,000봉에서 0회이고 구조적으로
+  // 임계값에 못 닿는다. 근거는 chartPatterns.ts 의 해당 주석에 있다.
   t('pattern_bear_pennant', '하락 페넌트 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
   t('pattern_rectangle', '박스권 돌파 (직사각형)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
 

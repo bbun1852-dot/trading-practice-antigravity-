@@ -291,8 +291,19 @@ export function detectChartPatterns(cs: Candle[]): Signal[] {
             
             const isFlag = bothDn && breakUp && isBullPole
             const isBearFlag = bothUp && breakDn && isBearPole
-            const isPennant = supUp && resDn && breakUp && isBullPole
             const isBearPennant = supUp && resDn && breakDn && isBearPole
+
+            // **상승 페넌트는 내지 않는다.** 조건은 (수렴 삼각 + 상방 돌파 + 앞 10봉에
+            // 3 ATR 깃대) 인데, 28,000봉 실측에서 상방 돌파 57건의 깃대 크기가
+            // 최소 -3.39 / 중앙 -0.46 / **최대 2.25 ATR** 로 임계값 3 에 한 번도
+            // 닿지 못했다. 하방은 최대 4.42 라 하락 페넌트만 산다 — 암호화폐가
+            // 오를 때보다 내릴 때 가파른 변동성 비대칭이다.
+            //
+            // 깃대 정의(3 ATR)를 낮추면 태그는 살지만 그건 패턴을 태그에 맞춰
+            // 약하게 만드는 것이다. 대신 taxonomy 에서 등재를 뺐다 — 등재만 되고
+            // 안 나오는 태그는 사용자가 체크하는 족족 헛다리가 되고, 반대로
+            // 등재 없이 배출하면 영원히 못 맞히는 유령 ⚠️놓침이 된다.
+            // 실데이터에서 나오기 시작하면 둘을 같이 되살린다.
             
             if (isFlag && !fired.has(`${k}|bflag`)) {
               fired.add(`${k}|bflag`)
@@ -309,14 +320,6 @@ export function detectChartPatterns(cs: Candle[]): Signal[] {
                 barIndex: i, confidence: 'B', strength: 2,
                 evidence: `하락 플래그 하단 ${fmtPrice(supV)} 이탈`,
                 refs: { price: supV, fromBar: startBar - 10, toBar: i }
-              })
-            } else if (isPennant && !fired.has(`${k}|bpennant`)) {
-              fired.add(`${k}|bpennant`)
-              out.push({
-                id: 'pattern_bull_pennant', tier: 3, kind: 'pattern', side: 'bullish',
-                barIndex: i, confidence: 'B', strength: 2,
-                evidence: `상승 페넌트 상단 ${fmtPrice(resV)} 돌파`,
-                refs: { price: resV, fromBar: startBar - 10, toBar: i }
               })
             } else if (isBearPennant && !fired.has(`${k}|brpennant`)) {
               fired.add(`${k}|brpennant`)
