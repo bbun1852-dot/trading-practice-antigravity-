@@ -47,6 +47,23 @@ describe('taxonomy 정합성', () => {
    * 아래 테스트가 이 목록에 있는 id 가 실제로 배출되면 실패하므로, 픽스처나
    * 감지기가 바뀌어 태그가 살아나면 이 목록에서 빼야 한다는 신호를 자동으로 받는다.
    */
+  /**
+   * 와이코프 10종이 공유하는 사유. 하나하나가 독립된 조건이 아니라 **에피소드 하나에
+   * 매달려 있으므로** 사유도 하나다.
+   *
+   * wyckoff_ps 만 빠진다 — PS 는 클라이맥스 **이전** 사건이라 에피소드 없이 자기 봉의
+   * 정보만으로 나야 하고(뒤늦게 심으면 그 자체가 미래참조다), 그래서 난수 보행에서도
+   * 배출된다.
+   */
+  const WYCKOFF_SYNTH_REASON =
+    '와이코프 감지기는 박스권(TR) 에피소드 상태기계다. 선행 추세(20봉에 2.5 ATR) → 거래량 ' +
+    '클라이맥스 → 자동 랠리로 TR 확정, 이 순서가 성립해야 에피소드가 열리고 나머지 사건은 ' +
+    '그 안에서만 정의된다. synthCandles 는 추세가 없는 난수 보행이라 첫 조건인 선행 추세부터 ' +
+    '성립하지 않는다 — 실측으로 3000봉에서 클라이맥스 0회다. 에피소드가 없으면 나머지 10종은 ' +
+    '정의상 날 수 없다. **실데이터에서는 11종 전부 배출된다**(10,000봉 실측, 계열 5~10/10). ' +
+    '도식 검증은 wyckoff.test.ts 의 repeatedSchematic 이 담당한다 — SC→AR→ST→침투→SOS 를 ' +
+    '실제로 걷는지 순서까지 고정한다.'
+
   const SYNTH_UNREACHABLE = new Map<string, string>([
     [
       'vol_climax',
@@ -74,22 +91,19 @@ describe('taxonomy 정합성', () => {
         '필요한데, synthCandles 의 무작위 워크에서는 10봉 연속 한 방향으로 ATR 3배 크기로 ' +
         '직진하는 극단적인 움직임이 수렴 패턴과 연달아 나타날 확률이 1200봉 안에서 희박하다.',
     ],
-    // Wyckoff 11종
-    [
-      'wyckoff_ps',
-      '와이코프 패턴은 장기간의 횡보 박스권(Trading Range)과 그 안에서의 거래량 클라이맥스, ' +
-        '복수의 테스트(ST, Spring 등)가 정교하게 맞아떨어져야 하므로 단순 무작위 워크 1200봉에서는 ' +
-        '완성될 확률이 0에 가깝다.',
-    ],
-    ['wyckoff_climax', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_ar', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_st', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_test', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_sos_sow', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_lps_lpsy', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_bu', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_utad', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
-    ['wyckoff_shakeout', '와이코프 패턴은 장기간의 횡보 박스권과 거래량 폭발 조건이 필요하다.'],
+    // ── 와이코프 10종 — 사유는 하나다 (WYCKOFF_SYNTH_REASON).
+    //    wyckoff_ps 는 여기 없다: 에피소드 없이 자기 봉만 보고 나는 유일한 사건이라
+    //    난수 보행에서도 배출된다.
+    ['wyckoff_climax', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_ar', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_st', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_spring_ut', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_test', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_sos_sow', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_lps_lpsy', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_bu', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_utad', WYCKOFF_SYNTH_REASON],
+    ['wyckoff_shakeout', WYCKOFF_SYNTH_REASON],
   ])
 
   it('TAGS 의 모든 태그는 감지기가 실제로 배출하거나, 배출 불가 사유가 명시돼 있다', () => {
