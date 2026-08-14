@@ -1,12 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { MemoryNotebook, type ReviewEntry } from './notebook'
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+import { MemoryNotebook, IndexedDBNotebook, type ReviewEntry, type NotebookDB } from './notebook'
 import type { Answer, GradeReport, Question } from '../quiz/types'
 
-describe('MemoryNotebook', () => {
-  let db: MemoryNotebook
+describe.each([
+  ['MemoryNotebook', () => new MemoryNotebook()],
+  ['IndexedDBNotebook', () => new IndexedDBNotebook()]
+])('%s', (_name, make) => {
+  let db: NotebookDB
 
-  beforeEach(() => {
-    db = new MemoryNotebook()
+  beforeEach(async () => {
+    globalThis.indexedDB = new IDBFactory()
+    db = make()
+    if (db instanceof IndexedDBNotebook) {
+      // Clear db if needed, though IDBFactory reset usually handles it
+      await db.clear()
+    }
   })
 
   function createDummyEntry(id: string, overrides: Partial<ReviewEntry> = {}): ReviewEntry {

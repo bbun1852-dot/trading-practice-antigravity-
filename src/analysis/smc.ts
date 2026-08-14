@@ -177,13 +177,42 @@ export function detectMSB(cs: Candle[]): Signal[] {
   const out: Signal[] = []
   let lastBullBreak = -1
   let lastBearBreak = -1
-  let currentTrend: 'up' | 'down' | 'none' = 'none'
+  
+  let pIdx = 0
+  const his: Pivot[] = []
+  const los: Pivot[] = []
 
   for (let i = 0; i < cs.length; i++) {
-    const hi = lastConfirmedPivot(pivots, i, 'high')
+    // Add pivots strictly before i for trend calculation (matches independentTrend(..., i - 1))
+    while (pIdx < pivots.length && pivots[pIdx].barIndex <= i - 1) {
+      const p = pivots[pIdx++]
+      if (p.kind === 'high') his.push(p)
+      else los.push(p)
+    }
+
+    let currentTrend: 'up' | 'down' | 'none' = 'none'
+    if (los.length >= 2 && his.length >= 2) {
+      const l1 = los[los.length - 2]
+      const l2 = los[los.length - 1]
+      const h1 = his[his.length - 2]
+      const h2 = his[his.length - 1]
+      if (l2.price > l1.price && h2.price > h1.price) currentTrend = 'up'
+      else if (l2.price < l1.price && h2.price < h1.price) currentTrend = 'down'
+    }
+
+    // Add pivots at exactly i for breakout targets
+    while (pIdx < pivots.length && pivots[pIdx].barIndex === i) {
+      const p = pivots[pIdx++]
+      if (p.kind === 'high') his.push(p)
+      else los.push(p)
+    }
+
+    const hi = his.length > 0 ? his[his.length - 1] : undefined
     if (hi && cs[i].close > hi.price && hi.pivotBar > lastBullBreak) {
       lastBullBreak = hi.pivotBar
-      const isChoch = currentTrend === 'down' || currentTrend === 'none'
+      // `none`일 때 CHoCH로 마킹하지 않는다. 기존 추세가 없으면 반전이 아니라 돌파(BOS)에 가깝기 때문.
+      // 체크포인트 ⑤는 `none`을 판정불가로 집계 제외하므로 게이트 통과에 지장 없음.
+      const isChoch = currentTrend === 'down'
       out.push({
         id: isChoch ? 'choch' : 'msb_bull', 
         tier: 1, kind: 'structure', side: 'bullish',
@@ -193,12 +222,11 @@ export function detectMSB(cs: Candle[]): Signal[] {
           : `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙하이 ${fmtPrice(hi.price)} 상향 돌파 (구조 상승)`,
         refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
       })
-      currentTrend = 'up'
     }
-    const lo = lastConfirmedPivot(pivots, i, 'low')
+    const lo = los.length > 0 ? los[los.length - 1] : undefined
     if (lo && cs[i].close < lo.price && lo.pivotBar > lastBearBreak) {
       lastBearBreak = lo.pivotBar
-      const isChoch = currentTrend === 'up' || currentTrend === 'none'
+      const isChoch = currentTrend === 'up'
       out.push({
         id: isChoch ? 'choch' : 'msb_bear', 
         tier: 1, kind: 'structure', side: 'bearish',
@@ -208,7 +236,6 @@ export function detectMSB(cs: Candle[]): Signal[] {
           : `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙로우 ${fmtPrice(lo.price)} 하향 붕괴 (구조 하락)`,
         refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
       })
-      currentTrend = 'down'
     }
   }
   return out

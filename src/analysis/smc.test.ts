@@ -114,7 +114,7 @@ describe('detectMSB', () => {
     assertNoLookAhead(detectMSB, synthCandles(220))
   })
 
-  it('직전 스윙 하이를 종가로 돌파하면 첫 돌파이므로 choch(bullish) 를 낸다', () => {
+  it('직전 스윙 하이를 종가로 돌파하면 첫 돌파이므로 msb_bull 을 낸다', () => {
     // 저점 → 고점(피벗) → 눌림 → 고점 돌파
     const cs = [
       ...Array.from({ length: 10 }, (_, i) => mk(100, 101, 99, 100, 100, i)),
@@ -123,7 +123,7 @@ describe('detectMSB', () => {
       mk(104, 110, 104, 109.5, 100, 16), // 108 위로 종가 마감
     ]
     const ids = detectMSB(cs).map(s => s.id)
-    expect(ids).toContain('choch')
+    expect(ids).toContain('msb_bull')
   })
 })
 
@@ -208,7 +208,7 @@ describe('detectLiquiditySweep — 고점 스윕 (liq_sweep_high)', () => {
 })
 
 describe('detectMSB — 하락 구조 붕괴 (msb_bear / choch)', () => {
-  it('종가가 확정된 직전 스윙로우를 하향 돌파하면 첫 돌파이므로 choch를 낸다', () => {
+  it('종가가 확정된 직전 스윙로우를 하향 돌파하면 첫 돌파이므로 msb_bear를 낸다', () => {
     const cs = [
       mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1),
       mk(100, 101, 95, 96, 100, 2),   // 2: 스윙로우 95
@@ -217,7 +217,7 @@ describe('detectMSB — 하락 구조 붕괴 (msb_bear / choch)', () => {
       mk(100, 101, 90, 91, 300, 7),   // 7: 종가 91 < 95 → 구조 붕괴
     ]
     const sigs = detectMSB(cs)
-    const s = sigs.find((x) => x.id === 'choch')
+    const s = sigs.find((x) => x.id === 'msb_bear')
     expect(s).toBeDefined()
     expect(s!.side).toBe('bearish')
     expect(s!.barIndex).toBe(7)

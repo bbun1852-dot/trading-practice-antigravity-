@@ -8,8 +8,51 @@ import { ruleCheck } from '../src/quiz/ruleCheck'
 import { toMarkdown } from '../src/quiz/report'
 import { TAG_BY_ID } from '../src/quiz/taxonomy'
 import type { Answer } from '../src/quiz/types'
+import { FileNotebook, type ReviewEntry } from '../src/data/notebook'
 
-const symbol = process.argv[2] ?? 'BTCUSDT'
+const args = process.argv.slice(2)
+const isReview = args.includes('--review')
+const symbol = args.find(a => !a.startsWith('--')) ?? 'BTCUSDT'
+
+if (isReview) {
+  const nb = new FileNotebook()
+  const entries = await nb.listAll()
+  
+  const coreFreq: Record<string, number> = {}
+  const falseFreq: Record<string, number> = {}
+  
+  for (const e of entries) {
+    for (const tag of e.coreMisses ?? []) coreFreq[tag] = (coreFreq[tag] ?? 0) + 1
+    for (const tag of e.falseClaims ?? []) falseFreq[tag] = (falseFreq[tag] ?? 0) + 1
+  }
+  
+  const sortFreq = (freq: Record<string, number>) => {
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 5)
+  }
+  
+  const topCore = sortFreq(coreFreq)
+  const topFalse = sortFreq(falseFreq)
+  
+  console.log('=== 오답 노트 통계 ===')
+  console.log('자주 놓친 핵심 근거 (Core Misses):')
+  if (topCore.length === 0) console.log('  없음')
+  topCore.forEach(([tag, count], i) => {
+    const note = count < 3 ? ' (표본 부족: 3건 미만)' : ''
+    console.log(`  ${i + 1}. ${tag} (${count}회)${note}`)
+  })
+  
+  console.log('자주 착각한 근거 (False Claims):')
+  if (topFalse.length === 0) console.log('  없음')
+  topFalse.forEach(([tag, count], i) => {
+    const note = count < 3 ? ' (표본 부족: 3건 미만)' : ''
+    console.log(`  ${i + 1}. ${tag} (${count}회)${note}`)
+  })
+  
+  process.exit(0)
+}
+
 const tf = '4h'
 const htfTf = HIGHER_TF[tf]
 const cs = await getCandles(symbol, tf, 1000)
@@ -84,5 +127,21 @@ const answer: Answer = {
   tags: [...active.slice(0, 2).map((s) => s.id), 'liq_sweep_high'],
 }
 
+const report = grade(q, answer)
 console.log(`\n=== 채점 리포트 ===\n`)
-console.log(toMarkdown(q, answer, grade(q, answer)))
+console.log(toMarkdown(q, answer, report))
+
+const nb = new FileNotebook()
+const entry: ReviewEntry = {
+  id: Date.now().toString(),
+  timestamp: Date.now(),
+  question: q,
+  answer,
+  report,
+  coreMisses: report.evidence.verdict.coreMisses,
+  falseClaims: report.evidence.verdict.falseClaims,
+  score: report.totalScore,
+  symbol,
+}
+await nb.save(entry)
+console.log(`\n[오답 노트 저장 완료]`)
