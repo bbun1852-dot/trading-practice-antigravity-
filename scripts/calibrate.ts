@@ -303,7 +303,7 @@ console.log(`\n\n=== 후보 밀도 측정 (계열마다 전수 정확 스캔 1�
 const dseries: DensitySeries[] = []
 for (const [label, cs] of candlesOf) {
   const t = Date.now()
-  const [sym, tfStr] = label.split(' ')
+  const [, tfStr] = label.split(' ')
   const tf = tfStr as Timeframe
   const htfTf = HIGHER_TF[tf]
   const htfCs = htfCandlesOf.get(label)!
@@ -466,7 +466,7 @@ let comboCandHit = 0
 for (const s of dseries) {
   const cs = candlesOf.get(s.label)!
   const htfCs = htfCandlesOf.get(s.label)!
-  const [sym, tfStr] = s.label.split(' ')
+  const [, tfStr] = s.label.split(' ')
   const tf = tfStr as Timeframe
   const htfTf = HIGHER_TF[tf]
   

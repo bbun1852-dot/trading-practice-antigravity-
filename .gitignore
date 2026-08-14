@@ -3,3 +3,8 @@ dist/
 .env
 .DS_Store
 .candle-cache/
+
+# 임시 측정 스크립트. 실데이터를 재려고 잠깐 만드는 것이라 저장소에 남으면 안 된다 —
+# 실제로 깨진 채 커밋돼 typecheck 를 막은 적이 있다(scripts/_overlap.ts, 2026-08-12).
+# scripts/verify.ts 가 추적 중인 scripts/_* 를 발견하면 실패시킨다.
+scripts/_*
