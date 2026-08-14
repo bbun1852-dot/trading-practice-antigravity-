@@ -8,6 +8,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "script": "tsx",
+    "verify": "tsx scripts/verify.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "drill": "tsx scripts/drill.ts"
   },

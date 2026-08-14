@@ -11,6 +11,8 @@ import {
 } from '../src/quiz/scanner'
 import type { SetupCandidate } from '../src/quiz/types'
 import { HIGHER_TF, type Candle, type Timeframe } from '../src/data/types'
+import { findPivots } from '../src/analysis/structure'
+import { detectMSB } from '../src/analysis/smc'
 
 /**
  * 위험 체크포인트 ①: 결정 시점 하나가 내놓는 "유효 근거" 개수가 사람이 실제로
@@ -726,3 +728,97 @@ if (deadTagsOk && rateOk) {
   process.exitCode = 1
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// 위험 체크포인트 ⑤: BOS/CHoCH 라벨이 실제 구조와 맞는가
+// ════════════════════════════════════════════════════════════════════════════
+//
+// **지금 이 게이트는 일부러 빨간 상태로 심어 뒀다. 이걸 초록으로 만드는 것이 작업 A 다.**
+//
+// detectMSB 는 2026-08-12 에 BOS 와 CHoCH 를 상호배타로 갈랐다. 같은 봉 동시 발화가
+// 0회이고 겹침률이 98% → 3.37% 로 떨어진 것은 실측으로 확인했다. 거기까진 맞다.
+//
+// 문제는 **라벨이 맞느냐** 다. currentTrend 가 "마지막 돌파 방향" 으로만 갱신되므로,
+// 상승 추세 중 작은 눌림목이 스윙로우를 건드리면 추세가 down 으로 뒤집히고, 뒤이은
+// 정상적인 상승 지속 돌파가 CHoCH(반전)로 찍힌다. 실제로 choch 475회 > msb_* 433회 로
+// 반전이 지속보다 흔하다 — 개념상 있을 수 없는 분포다.
+//
+// 독립 기준으로 재보면(확정 피벗의 HH/HL) choch 의 10.7% 가 오분류다. choch 는 4점
+// 짜리 최고 배점 태그이므로 오분류 비용이 그만큼 크다.
+//
+// **판정 기준(사장이 정했다. 협상 대상이 아니다):**
+//   추세가 판정 가능한 사건 중, 라벨이 실제 구조와 어긋난 비율이 5% 미만.
+//   "추세 = 확정 피벗 기준 HH/HL(up) · LH/LL(down), 그 외 none" 이 정답 정의다.
+//   이 정의를 바꿔서 통과시키지 마라 — 그건 게이트를 움직이는 것과 같다.
+
+const LABEL_ERROR_MAX = 5 // %
+
+console.log(`\n=== 체크포인트 ⑤ 게이트 판정 (BOS/CHoCH 라벨 정확도) ===`)
+
+/** 신호 이전까지 확정된 피벗만으로 본 독립 추세 판정 */
+function independentTrend(pivots: ReturnType<typeof findPivots>, i: number): 'up' | 'down' | 'none' {
+  const avail = pivots.filter((p) => p.barIndex <= i)
+  const los = avail.filter((p) => p.kind === 'low')
+  const his = avail.filter((p) => p.kind === 'high')
+  if (los.length < 2 || his.length < 2) return 'none'
+  const [l1, l2] = [los[los.length - 2], los[los.length - 1]]
+  const [h1, h2] = [his[his.length - 2], his[his.length - 1]]
+  if (l2.price > l1.price && h2.price > h1.price) return 'up'
+  if (l2.price < l1.price && h2.price < h1.price) return 'down'
+  return 'none'
+}
+
+let labChoch = 0, labChochBad = 0
+let labBos = 0, labBosBad = 0
+let labUndecidable = 0
+let labSameBar = 0
+
+for (const [, cs] of candlesOf) {
+  const pivots = findPivots(cs, 2)
+  const sigs = detectMSB(cs)
+
+  const byBar = new Map<number, string[]>()
+  for (const s of sigs) byBar.set(s.barIndex, [...(byBar.get(s.barIndex) ?? []), s.id])
+  for (const [, ids] of byBar) {
+    if (ids.includes('choch') && ids.some((x) => x.startsWith('msb_'))) labSameBar++
+  }
+
+  for (const s of sigs) {
+    const t = independentTrend(pivots, s.barIndex - 1)
+    if (t === 'none') { labUndecidable++; continue }
+    const reversal = (t === 'up' && s.side === 'bearish') || (t === 'down' && s.side === 'bullish')
+    if (s.id === 'choch') { labChoch++; if (!reversal) labChochBad++ }
+    else { labBos++; if (reversal) labBosBad++ }
+  }
+}
+
+const labDecidable = labChoch + labBos
+const labBad = labChochBad + labBosBad
+const labRate = labDecidable > 0 ? (labBad / labDecidable) * 100 : 0
+const chochRate = labChoch > 0 ? (labChochBad / labChoch) * 100 : 0
+const bosRate = labBos > 0 ? (labBosBad / labBos) * 100 : 0
+
+console.log(`기준: 추세 판정이 가능한 사건 중 라벨 오분류율이 ${LABEL_ERROR_MAX}% 미만.`)
+console.log(`정답 정의: 추세 = 확정 피벗의 HH/HL(up) · LH/LL(down). 이 정의는 고정이다.`)
+console.log(`${'구분'.padEnd(14)}${'건수'.padStart(8)}${'오분류'.padStart(8)}${'비율'.padStart(9)}`)
+console.log(`${'choch'.padEnd(14)}${String(labChoch).padStart(8)}${String(labChochBad).padStart(8)}${(chochRate.toFixed(1) + '%').padStart(9)}`)
+console.log(`${'msb_*'.padEnd(14)}${String(labBos).padStart(8)}${String(labBosBad).padStart(8)}${(bosRate.toFixed(1) + '%').padStart(9)}`)
+console.log('─'.repeat(39))
+console.log(`${'합계'.padEnd(14)}${String(labDecidable).padStart(8)}${String(labBad).padStart(8)}${(labRate.toFixed(1) + '%').padStart(9)}`)
+console.log(`추세 판정 불가(집계 제외) ${labUndecidable}건 / 같은 봉 동시 발화 ${labSameBar}건 (0이어야 한다)`)
+
+if (labRate < LABEL_ERROR_MAX && labSameBar === 0) {
+  console.log(`\n판정: PASS — 오분류율 ${labRate.toFixed(1)}% < ${LABEL_ERROR_MAX}%, 동시 발화 없음.`)
+} else {
+  console.log(
+    `\n판정: FAIL — 오분류율 ${labRate.toFixed(1)}% (기준 ${LABEL_ERROR_MAX}% 미만)` +
+    (labSameBar > 0 ? `, 같은 봉 동시 발화 ${labSameBar}건` : ''),
+  )
+  console.log(
+    `        이것은 **의도적으로 심어둔 실패**다. 인수인계서의 작업 A 가 이걸 초록으로\n` +
+    `        만드는 일이다. smc.ts 의 detectMSB 에서 currentTrend 를 "마지막 돌파 방향"\n` +
+    `        대신 확정 피벗의 HH/HL 구조로 판정하도록 고쳐라. 기준값 ${LABEL_ERROR_MAX} 을 올리는 것은\n` +
+    `        해결이 아니다 — guards.test.ts 가 게이트 상수를 잠그고 있다.`,
+  )
+  process.exitCode = 1
+}
