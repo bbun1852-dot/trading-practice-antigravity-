@@ -13,6 +13,7 @@ const q = (hidden: Candle[]): Question => ({
   symbol: 'T', timeframe: '4h', startTime: 0, decisionIndex: 1,
   type: 'normal', difficulty: 'medium',
   candles: [mk(100, 101, 99, 100, 100, 0), mk(100, 101, 99, 100, 100, 1), ...hidden],
+  htfCandles: [],
 })
 
 const long: Answer = { direction: 'long', entry: 100, stopLoss: 95, takeProfit: 110, tags: [] }

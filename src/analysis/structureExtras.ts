@@ -105,12 +105,7 @@ export function detectStructureExtras(cs: Candle[]): Signal[] {
       const key = `bear|${lo.pivotBar}`
       if (!chochFired.has(key)) {
         chochFired.add(key)
-        out.push({
-          id: 'choch', tier: 1, kind: 'structure', side: 'bearish',
-          barIndex: i, confidence: 'A', strength: 3,
-          evidence: `상승 구조에서 종가 ${fmtPrice(c.close)} 가 스윙로우 ${fmtPrice(lo.price)} 이탈 — 성격 전환`,
-          refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
-        })
+        // choch 배출은 detectMSB(smc.ts)로 위임. 여기서는 retest_* 를 위해 레벨만 기억한다.
         pending = { level: lo.price, up: false, at: i }
       }
     }
@@ -118,12 +113,7 @@ export function detectStructureExtras(cs: Candle[]): Signal[] {
       const key = `bull|${hi.pivotBar}`
       if (!chochFired.has(key)) {
         chochFired.add(key)
-        out.push({
-          id: 'choch', tier: 1, kind: 'structure', side: 'bullish',
-          barIndex: i, confidence: 'A', strength: 3,
-          evidence: `하락 구조에서 종가 ${fmtPrice(c.close)} 가 스윙하이 ${fmtPrice(hi.price)} 돌파 — 성격 전환`,
-          refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
-        })
+        // choch 배출은 detectMSB(smc.ts)로 위임. 여기서는 retest_* 를 위해 레벨만 기억한다.
         pending = { level: hi.price, up: true, at: i }
       }
     }

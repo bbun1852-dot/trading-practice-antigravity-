@@ -161,7 +161,7 @@ describe('makeQuestion', () => {
     it('비밀 필드(symbol/startTime/type/decisionIndex)가 키로도 존재하지 않는다', () => {
       // 몇 개만 기억해서 확인하는 게 아니라, 반환 객체의 키 전체를 고정한다 —
       // 나중에 누가 편의상 symbol 이나 type 을 슬쩍 끼워 넣어도 여기서 잡힌다.
-      expect(Object.keys(view).sort()).toEqual(['candles', 'difficulty', 'timeframe'])
+      expect(Object.keys(view).sort()).toEqual(['candles', 'difficulty', 'htfCandles', 'timeframe'])
       expect('symbol' in view).toBe(false)
       expect('startTime' in view).toBe(false)
       expect('type' in view).toBe(false)

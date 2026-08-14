@@ -8,6 +8,7 @@ const q: Question = {
   symbol: 'BTCUSDT', timeframe: '4h', startTime: 1700000000, decisionIndex: 199,
   type: 'no_setup', difficulty: 'medium',
   candles: Array.from({ length: 260 }, (_, i) => mk(100, 100.5, 99.5, 100, 100, i)),
+  htfCandles: []
 }
 const a: Answer = { direction: 'flat', tags: [] }
 

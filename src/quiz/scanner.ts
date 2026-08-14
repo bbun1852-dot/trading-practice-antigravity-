@@ -1,4 +1,4 @@
-import type { Candle } from '../data/types'
+import type { Candle, Timeframe } from '../data/types'
 import type { Signal } from '../analysis/signalTypes'
 import { detectAll } from '../analysis/signals'
 import { filterActive, activeSignalsAt } from './lifetime'
@@ -242,14 +242,21 @@ export function mergeCandidates(
  */
 export function scanForSetups(
   cs: Candle[],
-  opts: { minScore?: number; mergeWindow?: number } = {},
+  opts: {
+    tf?: Timeframe
+    htfCs?: Candle[]
+    htfTf?: Timeframe
+    minScore?: number
+    mergeWindow?: number
+  } = {},
 ): SetupCandidate[] {
   const minScore = opts.minScore ?? DEFAULT_MIN_SCORE
   const mergeWindow = opts.mergeWindow ?? DEFAULT_MERGE_WINDOW
   const coarseFloor = minScore - COARSE_SLACK
+  const tf = opts.tf ?? '1h'
 
   // ── 1단계: detectAll 1회 + 수명 필터로 후보 봉만 추린다 ──
-  const all = detectAll(cs)
+  const all = detectAll(cs, tf, opts.htfCs, opts.htfTf)
   const rough: number[] = []
   for (let i = WARMUP; i < cs.length; i++) {
     if (setupScore(filterActive(cs, all, i)) >= coarseFloor) rough.push(i)
@@ -258,7 +265,7 @@ export function scanForSetups(
   // ── 2단계: 후보 봉에만 정확 경로를 돌린다 ──
   const exact: SetupCandidate[] = []
   for (const barIndex of rough) {
-    const active = activeSignalsAt(cs, barIndex)
+    const active = activeSignalsAt(cs, barIndex, tf, opts.htfCs, opts.htfTf)
     const score = setupScore(active)
     if (score < minScore) continue
     exact.push({

@@ -177,27 +177,38 @@ export function detectMSB(cs: Candle[]): Signal[] {
   const out: Signal[] = []
   let lastBullBreak = -1
   let lastBearBreak = -1
+  let currentTrend: 'up' | 'down' | 'none' = 'none'
 
   for (let i = 0; i < cs.length; i++) {
     const hi = lastConfirmedPivot(pivots, i, 'high')
     if (hi && cs[i].close > hi.price && hi.pivotBar > lastBullBreak) {
       lastBullBreak = hi.pivotBar
+      const isChoch = currentTrend === 'down' || currentTrend === 'none'
       out.push({
-        id: 'msb_bull', tier: 1, kind: 'structure', side: 'bullish',
+        id: isChoch ? 'choch' : 'msb_bull', 
+        tier: 1, kind: 'structure', side: 'bullish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙하이 ${fmtPrice(hi.price)} 상향 돌파 (구조 상승)`,
+        evidence: isChoch
+          ? `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙하이 ${fmtPrice(hi.price)} 돌파 (CHoCH, 추세 반전)`
+          : `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙하이 ${fmtPrice(hi.price)} 상향 돌파 (구조 상승)`,
         refs: { price: hi.price, pivotBar: hi.pivotBar, toBar: i },
       })
+      currentTrend = 'up'
     }
     const lo = lastConfirmedPivot(pivots, i, 'low')
     if (lo && cs[i].close < lo.price && lo.pivotBar > lastBearBreak) {
       lastBearBreak = lo.pivotBar
+      const isChoch = currentTrend === 'up' || currentTrend === 'none'
       out.push({
-        id: 'msb_bear', tier: 1, kind: 'structure', side: 'bearish',
+        id: isChoch ? 'choch' : 'msb_bear', 
+        tier: 1, kind: 'structure', side: 'bearish',
         barIndex: i, confidence: 'A', strength: 3,
-        evidence: `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙로우 ${fmtPrice(lo.price)} 하향 붕괴 (구조 하락)`,
+        evidence: isChoch
+          ? `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙로우 ${fmtPrice(lo.price)} 이탈 (CHoCH, 추세 반전)`
+          : `종가 ${fmtPrice(cs[i].close)} 가 직전 스윙로우 ${fmtPrice(lo.price)} 하향 붕괴 (구조 하락)`,
         refs: { price: lo.price, pivotBar: lo.pivotBar, toBar: i },
       })
+      currentTrend = 'down'
     }
   }
   return out

@@ -36,6 +36,7 @@ const question = (candles: Candle[], over: Partial<Question> = {}): Question => 
   type: 'normal',
   difficulty: 'medium',
   candles,
+  htfCandles: [],
   ...over,
 })
 
@@ -694,12 +695,11 @@ describe('confidence 등급별 감점 차등', () => {
    * 데이터가 아니라 4봉 묶음 합성이라 사용자가 실제 상위 차트에서 본 것과 다를 수
    * 있다. 추세선과 같은 이유로 절반만 깎는다.
    */
-  it('와이코프 11종과 HTF 3종이 전부 B등급이다', () => {
+  it('와이코프 11종이 전부 B등급이다', () => {
     const ids = [
       'wyckoff_ps', 'wyckoff_climax', 'wyckoff_ar', 'wyckoff_st', 'wyckoff_spring_ut',
       'wyckoff_test', 'wyckoff_sos_sow', 'wyckoff_lps_lpsy', 'wyckoff_bu',
       'wyckoff_utad', 'wyckoff_shakeout',
-      'htf_trend', 'htf_bos', 'htf_poi',
     ]
     for (const id of ids) {
       expect(TAG_BY_ID.get(id)?.confidence, `${id} 가 B등급이 아니다`).toBe('B')

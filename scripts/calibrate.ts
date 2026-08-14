@@ -10,7 +10,7 @@ import {
   WARMUP, DEFAULT_MIN_SCORE, DEFAULT_MERGE_WINDOW, COARSE_SLACK,
 } from '../src/quiz/scanner'
 import type { SetupCandidate } from '../src/quiz/types'
-import type { Candle, Timeframe } from '../src/data/types'
+import { HIGHER_TF, type Candle, type Timeframe } from '../src/data/types'
 
 /**
  * 위험 체크포인트 ①: 결정 시점 하나가 내놓는 "유효 근거" 개수가 사람이 실제로
@@ -116,13 +116,20 @@ const tagHits = new Map<string, number>()
 /** 체크포인트 ② 가 같은 캔들을 다시 쓴다 (같은 창이어야 두 판정이 같은 데이터 위에 선다) */
 const candlesOf = new Map<string, Candle[]>()
 
+const htfCandlesOf = new Map<string, Candle[]>()
+
 for (const sym of SYMBOLS) {
   for (const tf of TFS) {
     const cs = await getCandles(sym, tf, 1000, END_TIME)
+    const htfTf = HIGHER_TF[tf]
+    const htfCs = await getCandles(sym, htfTf, 1000, END_TIME)
+    
     candlesOf.set(`${sym} ${tf}`, cs)
+    htfCandlesOf.set(`${sym} ${tf}`, htfCs)
+    
     const counts: number[] = []
     for (const at of AT) {
-      const active = activeSignalsAt(cs, at)
+      const active = activeSignalsAt(cs, at, tf, htfCs, htfTf)
       counts.push(active.length)
       pooled.push(active.length)
       for (const s of active) tagHits.set(s.id, (tagHits.get(s.id) ?? 0) + 1)
@@ -236,14 +243,17 @@ const TIER_SHARE_MAX = 70
  * NMS 가 버릴 가능성이 큰 봉이다. 실패가 몰리는 자리가 곧 병합 후 비교가 가장 둔한
  * 자리라, 병합 후 비교만으로는 COARSE_SLACK 을 회귀 검사할 수 없다.
  */
-function measureSeries(cs: Candle[]): { rows: SetupCandidate[]; maxGap: number; minGap: number } {
-  const all = detectAll(cs)
+function measureSeries(cs: Candle[], tf: Timeframe, htfCs: Candle[], htfTf: Timeframe): { rows: SetupCandidate[]; maxGap: number; minGap: number; counts: Map<string, number> } {
+  const all = detectAll(cs, tf, htfCs, htfTf)
+  const counts = new Map<string, number>()
+  for (const s of all) counts.set(s.id, (counts.get(s.id) ?? 0) + 1)
+
   const rows: SetupCandidate[] = []
   let maxGap = -Infinity
   let minGap = Infinity
 
   for (let i = WARMUP; i < cs.length; i++) {
-    const active = activeSignalsAt(cs, i)
+    const active = activeSignalsAt(cs, i, tf, htfCs, htfTf)
     const exact = setupScore(active)
     const coarse = setupScore(filterActive(cs, all, i))
 
@@ -265,7 +275,7 @@ function measureSeries(cs: Candle[]): { rows: SetupCandidate[]; maxGap: number; 
       activeCount: active.length,
     })
   }
-  return { rows, maxGap, minGap }
+  return { rows, maxGap, minGap, counts }
 }
 
 /** 전수 점수표에서 minScore 로 거르고 스캐너와 같은 병합을 적용한 기준 답안 */
@@ -285,21 +295,27 @@ type DensitySeries = {
   maxGap: number
   /** 봉 단위 과대추정 최대 (음수). 정보용이며 실패 조건이 아니다 */
   minGap: number
+  /** 이 계열에서 감지기가 배출한 태그별 빈도 */
+  counts: Map<string, number>
 }
 
 console.log(`\n\n=== 후보 밀도 측정 (계열마다 전수 정확 스캔 1회) ===`)
 const dseries: DensitySeries[] = []
 for (const [label, cs] of candlesOf) {
   const t = Date.now()
-  const { rows, maxGap, minGap } = measureSeries(cs)
-  const fast = scanForSetups(cs, { minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })
+  const [sym, tfStr] = label.split(' ')
+  const tf = tfStr as Timeframe
+  const htfTf = HIGHER_TF[tf]
+  const htfCs = htfCandlesOf.get(label)!
+  const { rows, maxGap, minGap, counts } = measureSeries(cs, tf, htfCs, htfTf)
+  const fast = scanForSetups(cs, { tf, htfCs, htfTf, minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })
   const ref = reference(rows, DEFAULT_MIN_SCORE)
   // 후보는 필드 전부가 같아야 한다 — barIndex 만 맞고 점수·난이도가 다르면 그것도 불일치다.
   const fastKeys = new Set(fast.map((c) => JSON.stringify(c)))
   const refKeys = new Set(ref.map((c) => JSON.stringify(c)))
   const lost = [...refKeys].filter((k) => !fastKeys.has(k)).length
   const extra = [...fastKeys].filter((k) => !refKeys.has(k)).length
-  dseries.push({ label, bars: cs.length, rows, lost, extra, maxGap, minGap })
+  dseries.push({ label, bars: cs.length, rows, lost, extra, maxGap, minGap, counts })
   console.log(`  ${label.padEnd(14)} 전수 ${String(Date.now() - t).padStart(5)}ms  후보 ${String(fast.length).padStart(3)}개`)
 }
 
@@ -449,14 +465,19 @@ let comboCandHit = 0
 
 for (const s of dseries) {
   const cs = candlesOf.get(s.label)!
+  const htfCs = htfCandlesOf.get(s.label)!
+  const [sym, tfStr] = s.label.split(' ')
+  const tf = tfStr as Timeframe
+  const htfTf = HIGHER_TF[tf]
+  
   let barHit = 0
   let barN = 0
   for (let i = WARMUP; i < cs.length; i++) {
     barN++
-    if (hasGoldenCombo(activeSignalsAt(cs, i))) barHit++
+    if (hasGoldenCombo(activeSignalsAt(cs, i, tf, htfCs, htfTf))) barHit++
   }
   const cand = reference(s.rows, DEFAULT_MIN_SCORE)
-  const candHit = cand.filter((c) => hasGoldenCombo(activeSignalsAt(cs, c.barIndex))).length
+  const candHit = cand.filter((c) => hasGoldenCombo(activeSignalsAt(cs, c.barIndex, tf, htfCs, htfTf))).length
 
   comboBarsAll += barN
   comboBarsHit += barHit
@@ -592,11 +613,21 @@ const genericSets: ReturnType<typeof activeSignalsAt>[] = []
 for (const sym of SYMBOLS) {
   for (const tf of TFS) {
     const cs = candlesOf.get(`${sym} ${tf}`)!
-    for (const at of AT) genericSets.push(activeSignalsAt(cs, at))
-    for (const cand of scanForSetups(cs, { minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })) {
-      const q = makeQuestion(cs, sym, tf, cand)
+    const htfCs = htfCandlesOf.get(`${sym} ${tf}`)!
+    const htfTf = HIGHER_TF[tf]
+    
+    for (const at of AT) genericSets.push(activeSignalsAt(cs, at, tf, htfCs, htfTf))
+    for (const cand of scanForSetups(cs, { tf, htfCs, htfTf, minScore: DEFAULT_MIN_SCORE, mergeWindow: DEFAULT_MERGE_WINDOW })) {
+      const q = makeQuestion(cs, sym, tf, cand, { htfCs, htfTf })
       if (!q) continue
-      questionSets.push(activeSignalsAt(q.candles.slice(0, q.decisionIndex + 1), q.decisionIndex))
+      const active = activeSignalsAt(
+        q.candles.slice(0, q.decisionIndex + 1),
+        q.decisionIndex,
+        q.timeframe,
+        q.htfCandles,
+        HIGHER_TF[q.timeframe]
+      )
+      questionSets.push(active)
     }
   }
 }
@@ -645,3 +676,53 @@ if (coreKOk) {
   console.log(`\n판정: FAIL — K=${DEFAULT_CORE_K} 가 기준을 벗어난다. 위 표에서 PASS 인 K 로 grader.ts 의 DEFAULT_CORE_K 를 바꿔야 한다.`)
   process.exitCode = 1
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 위험 체크포인트 ④: 죽은 태그 0종 및 발화율 상한
+// ════════════════════════════════════════════════════════════════════════════
+//
+// 1. 등재 태그(TAGS)가 모두 실데이터(풀링)에서 적어도 한 번은 배출되어야 한다.
+// 2. 한 계열 내에서 1000봉당 150회를 넘는 과다 발화 태그가 없어야 한다.
+//    단, lifetime 이 'bar' 인 태그는 예외다.
+
+const MAX_FIRING_RATE = 150
+
+console.log(`\n=== 체크포인트 ④ 게이트 판정 (죽은 태그 및 발화율 상한) ===`)
+const allFiredTags = new Set<string>()
+const rateFailed: string[] = []
+
+for (const s of dseries) {
+  const bars = s.bars
+  for (const [id, count] of s.counts) {
+    allFiredTags.add(id)
+    const lt = TAG_BY_ID.get(id)?.lifetime
+    if (lt?.kind === 'bar') continue
+    const rate = per1000(count, bars)
+    if (rate > MAX_FIRING_RATE) {
+      rateFailed.push(`${s.label} 의 ${id} (${rate.toFixed(1)}회)`)
+    }
+  }
+}
+
+const registeredTags = new Set(TAGS.map((t) => t.id))
+const deadTags = [...registeredTags].filter((id) => !allFiredTags.has(id))
+const unregisteredTags = [...allFiredTags].filter((id) => !registeredTags.has(id))
+
+console.log(`기준 1(죽은 태그): 등재 태그 ${registeredTags.size}종이 모두 배출되어야 한다 (실측 배출: ${allFiredTags.size}종)`)
+console.log(`기준 2(과다 발화): bar 수명이 아닌 태그 중 1000봉당 발화율이 ${MAX_FIRING_RATE}회를 초과하는 태그가 없어야 한다.`)
+
+const deadTagsOk = deadTags.length === 0 && unregisteredTags.length === 0
+const rateOk = rateFailed.length === 0
+
+if (deadTagsOk && rateOk) {
+  console.log(`\n판정: PASS — 죽은 태그/미등재 태그 0종이며, 과다 발화 태그가 없다.`)
+} else {
+  const why = [
+    deadTags.length > 0 ? `죽은 태그 ${deadTags.length}종: ${deadTags.join(', ')}` : '',
+    unregisteredTags.length > 0 ? `미등재 배출 태그 ${unregisteredTags.length}종: ${unregisteredTags.join(', ')}` : '',
+    rateFailed.length > 0 ? `과다 발화 ${rateFailed.length}건: ${rateFailed.slice(0, 5).join(', ')}${rateFailed.length > 5 ? ' 등' : ''}` : ''
+  ].filter(Boolean).join(' / ')
+  console.log(`\n판정: FAIL — ${why}`)
+  process.exitCode = 1
+}
+

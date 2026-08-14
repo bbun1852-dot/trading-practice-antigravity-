@@ -1,4 +1,4 @@
-import type { Candle, Timeframe } from '../data/types'
+import { DURATION, HIGHER_TF, type Candle, type Timeframe } from '../data/types'
 import { atr } from '../analysis/indicators'
 import { activeSignalsAt } from './lifetime'
 import { dominantSide, difficultyOf } from './scanner'
@@ -104,6 +104,7 @@ function classifyType(
 export function makeQuestion(
   cs: Candle[], symbol: string, tf: Timeframe, candidate: SetupCandidate,
   opts: {
+    htfCs?: Candle[]; htfTf?: Timeframe
     warmup?: number; visible?: number; hidden?: number
     minEvidence?: number; maxEvidence?: number
   } = {},
@@ -120,7 +121,15 @@ export function makeQuestion(
   if (start < 0 || end > cs.length) return null
 
   const window = cs.slice(start, end)
-  const active = activeSignalsAt(window, decisionIndex)
+  
+  let windowHtf: Candle[] = []
+  if (opts.htfCs && opts.htfTf) {
+    const minTime = window[0].time - DURATION[opts.htfTf]
+    const maxTime = window[window.length - 1].time + DURATION[tf]
+    windowHtf = opts.htfCs.filter(c => c.time >= minTime && c.time <= maxTime)
+  }
+
+  const active = activeSignalsAt(window, decisionIndex, tf, windowHtf, opts.htfTf)
   if (active.length < minEvidence || active.length > maxEvidence) return null
 
   const { direction } = classifyOutcome(window, decisionIndex, hidden)
@@ -138,6 +147,7 @@ export function makeQuestion(
     // 애초에 걸러낸다) — difficulty 는 은닉 구간과 무관하고 풀기 전에 보여줘도 안전하다.
     difficulty: difficultyOf(active),
     candles: window,
+    htfCandles: windowHtf,
   }
 }
 
@@ -153,10 +163,13 @@ export function makeQuestion(
  * 함께 갖고 있지 않은 한 은닉 봉이나 비밀 필드에 접근할 방법이 없다.
  */
 export function solverView(q: Question): SolverView {
+  const htfTf = HIGHER_TF[q.timeframe]
+  const decisionTime = q.candles[q.decisionIndex].time + DURATION[q.timeframe]
   return {
     timeframe: q.timeframe,
     difficulty: q.difficulty,
     candles: q.candles.slice(0, q.decisionIndex + 1),
+    htfCandles: q.htfCandles.filter(c => c.time + DURATION[htfTf] <= decisionTime),
   }
 }
 

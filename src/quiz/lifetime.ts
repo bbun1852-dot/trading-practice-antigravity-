@@ -2,6 +2,7 @@ import type { Candle } from '../data/types'
 import type { Signal } from '../analysis/signalTypes'
 import { detectSignals } from '../analysis/signals'
 import { TAG_BY_ID, type LifetimeClass } from './taxonomy'
+import type { Timeframe } from '../data/types'
 
 export type ActiveSignal = Signal & { ageBars: number }
 
@@ -73,6 +74,12 @@ export function filterActive(cs: Candle[], signals: Signal[], atIndex: number): 
  * detectAll(cs).filter() 지름길을 여기서 쓰면 안 된다 — 상태 의존 신호(미충족 FVG 등)가
  * 관측 시점에 따라 정당하게 달라지므로 두 경로는 동치가 아니다.
  */
-export function activeSignalsAt(cs: Candle[], atIndex: number): ActiveSignal[] {
-  return filterActive(cs, detectSignals(cs, atIndex), atIndex)
+export function activeSignalsAt(
+  cs: Candle[],
+  atIndex: number,
+  tf: Timeframe = '1h',
+  htfCs?: Candle[],
+  htfTf?: Timeframe
+): ActiveSignal[] {
+  return filterActive(cs, detectSignals(cs, atIndex, tf, htfCs, htfTf), atIndex)
 }
