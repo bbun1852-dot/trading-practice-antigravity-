@@ -3,6 +3,9 @@ dist/
 .env
 .DS_Store
 .candle-cache/
+# 오답노트(FileNotebook)의 저장소. 사용자가 실제로 푼 문제와 답안이 들어간다 —
+# 캔들 캐시와 같은 이유로 저장소에 올리지 않는다.
+.notebook-cache/
 
 # 임시 측정 스크립트. 실데이터를 재려고 잠깐 만드는 것이라 저장소에 남으면 안 된다 —
 # 실제로 깨진 채 커밋돼 typecheck 를 막은 적이 있다(scripts/_overlap.ts, 2026-08-12).
