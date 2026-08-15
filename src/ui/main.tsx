@@ -1,6 +1,13 @@
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { SpikeApp } from './spike/SpikeApp'
+import { App } from './App'
+import './styles.css'
 
-// StrictMode 를 일부러 뺐다 — 개발 모드의 이펙트 이중 실행이 차트 생성/파괴를
-// 두 번 돌려 스파이크 판정을 흐린다. Task 2 골격에서 cleanup 을 검증한 뒤 켠다.
-createRoot(document.getElementById('root')!).render(<SpikeApp />)
+// 스파이크에서 빼뒀던 StrictMode 를 되돌린다 — 골격의 이펙트는 전부 cleanup 을
+// 갖췄다(App 의 타이머, ReplayScreen 의 interval). 차트 마운트(Task 5)도
+// chart.remove() cleanup 을 전제로 들어온다.
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

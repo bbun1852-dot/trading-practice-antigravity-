@@ -1,0 +1,97 @@
+/* Part 8 골격 스타일 — Tailwind 는 보류 확정(스펙 §10), plain CSS 로 간다.
+   다크 단일 테마 (스펙 §6). */
+
+:root {
+  --bg: #0e1116;
+  --bg-panel: #151a21;
+  --border: #2a2f38;
+  --text: #c8ccd4;
+  --text-dim: #7d8590;
+  --accent: #2f81f7;
+  --up: #26a69a;
+  --down: #ef5350;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.phase-indicator { color: var(--text-dim); font-size: 13px; }
+.spacer { flex: 1; }
+
+.screen { flex: 1; display: flex; min-height: 0; }
+
+.center-box {
+  margin: auto; text-align: center;
+  display: flex; flex-direction: column; gap: 12px; align-items: center;
+}
+
+.loading { margin: auto; color: var(--text-dim); }
+
+/* 풀이 화면 — 스펙 §5.1 배치 */
+.answering {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: 1fr auto;
+  gap: 8px; padding: 8px;
+}
+.chart-area { grid-column: 1; grid-row: 1; }
+.side-area {
+  grid-column: 2; grid-row: 1;
+  display: flex; flex-direction: column; gap: 8px; min-height: 0;
+}
+.side-area .htf { flex: 0 0 160px; }
+.side-area .sheet { flex: 1; overflow-y: auto; }
+.answer-bar {
+  grid-column: 1 / -1; grid-row: 2;
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.direction { display: flex; gap: 12px; }
+
+.placeholder {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--border); border-radius: 6px;
+  color: var(--text-dim); font-size: 14px;
+}
+
+button {
+  background: var(--bg-panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 14px; cursor: pointer; font-size: 14px;
+}
+button:hover { border-color: var(--text-dim); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+progress { width: 260px; }
+
+/* 오답노트 오버레이 */
+.notebook-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.notebook-panel {
+  width: min(720px, 90vw); max-height: 80vh; overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px 24px;
+}
+.notebook-panel header { display: flex; justify-content: space-between; align-items: center; }
