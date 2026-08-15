@@ -2,6 +2,9 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync 
 import { join } from 'node:path'
 import type { Candle, Timeframe } from './types'
 import { fetchKlines } from './binance'
+// 페이로드 판정기는 브라우저 캐시(cache.ts)와 공유한다 — 두 캐시가 서로 다른
+// 데이터를 "정상" 이라 부르는 일이 없어야 한다 (validate.ts 주석 참조)
+import { isValidCandles } from './validate'
 
 /**
  * 스크립트 전용 캔들 캐시. Node 에만 존재하며 브라우저의 IndexedDB 캐시(cache.ts)와 별개다.
@@ -46,27 +49,6 @@ export function cachePath(
   const safe = symbol.replace(/[^A-Za-z0-9_]/g, '_')
   // endTime 이 키에 들어가야 파일 이름이 실제로 어떤 봉을 가리키는지 뜻이 생긴다.
   return join(DIR, `${safe}-${tf}-${limit}-${endTime ?? 'latest'}.json`)
-}
-
-const NUM_FIELDS = ['time', 'open', 'high', 'low', 'close', 'volume'] as const
-
-function isCandle(v: unknown): v is Candle {
-  if (typeof v !== 'object' || v === null) return false
-  const o = v as Record<string, unknown>
-  // 여섯 필드가 전부 있고 전부 유한수여야 한다. NaN/Infinity/문자열은 전부 탈락 —
-  // JSON.parse 는 "1.0" 같은 문자열도 군말 없이 통과시킨다.
-  return NUM_FIELDS.every((k) => typeof o[k] === 'number' && Number.isFinite(o[k]))
-}
-
-/** 페이로드를 진짜로 검사한다. 1000개쯤 훑는 건 비용이 아니다. */
-function isValidCandles(v: unknown): v is Candle[] {
-  if (!Array.isArray(v) || v.length === 0) return false
-  for (let i = 0; i < v.length; i++) {
-    if (!isCandle(v[i])) return false
-    // 모든 감지기가 시간 오름차순을 전제한다. 중복·역순은 조용히 통과시키면 안 된다.
-    if (i > 0 && v[i].time <= v[i - 1].time) return false
-  }
-  return true
 }
 
 /** 검증에 실패한 파일은 지운다 — 같은 실패를 매 실행마다 되풀이하지 않기 위해서다. */
