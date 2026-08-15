@@ -113,6 +113,18 @@ describe('detectMSB', () => {
   it('look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectMSB, synthCandles(220))
   })
+
+  it('직전 스윙 하이를 종가로 돌파하면 msb_bull 을 낸다', () => {
+    // 저점 → 고점(피벗) → 눌림 → 고점 돌파
+    const cs = [
+      ...Array.from({ length: 10 }, (_, i) => mk(100, 101, 99, 100, 100, i)),
+      mk(100, 108, 100, 107, 100, 10),   // 스윙 하이 108
+      ...Array.from({ length: 5 }, (_, i) => mk(107, 107.5, 103, 104, 100, 11 + i)),
+      mk(104, 110, 104, 109.5, 100, 16), // 108 위로 종가 마감
+    ]
+    const ids = detectMSB(cs).map(s => s.id)
+    expect(ids).toContain('msb_bull')
+  })
 })
 
 // ── Task 13 Group B: 하락 분기 보강 ──

@@ -50,24 +50,33 @@ describe('detectCandlePatterns', () => {
     expect(idsAt(cs, 1)).toContain('candle_inside_bar')
   })
 
-  it('트위저 바텀: 저점만 일치하면 상승 신호만 발생한다', () => {
-    const cs = [mk(100, 105, 95, 102, 100, 0), mk(103, 115, 95.05, 110, 100, 1)]
-    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
+  it('트위저 바텀: 저점만 일치하고 색이 반대이면 tweezer_bottom만 발생한다', () => {
+    // ATR 워밍업용 20봉 도입부 (TR=4 고정 → ATR≈4, 허용오차≈0.4)
+    const lead = Array.from({ length: 20 }, (_, i) => mk(100, 102, 98, 100, 100, i))
+    const cs = [...lead, mk(100, 108, 95, 96, 100, 20), mk(96, 101, 95.05, 100, 100, 21)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 21 && s.id.startsWith('tweezer_'))
     expect(tweezers).toHaveLength(1)
+    expect(tweezers[0].id).toBe('tweezer_bottom')
     expect(tweezers[0].side).toBe('bullish')
   })
 
-  it('트위저 탑: 고점만 일치하면 하락 신호만 발생한다', () => {
-    const cs = [mk(100, 110, 95, 103, 100, 0), mk(104, 110.05, 90, 95, 100, 1)]
-    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
+  it('트위저 탑: 고점만 일치하고 색이 반대이면 tweezer_top만 발생한다', () => {
+    const lead = Array.from({ length: 20 }, (_, i) => mk(100, 102, 98, 100, 100, i))
+    const cs = [...lead, mk(96, 108, 95, 103, 100, 20), mk(104, 108.05, 90, 95, 100, 21)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 21 && s.id.startsWith('tweezer_'))
     expect(tweezers).toHaveLength(1)
+    expect(tweezers[0].id).toBe('tweezer_top')
     expect(tweezers[0].side).toBe('bearish')
   })
 
-  it('트위저: 저점과 고점이 모두 일치하면 상승·하락 신호가 둘 다 발생한다 (회귀)', () => {
-    const cs = [mk(100, 110, 95, 103, 100, 0), mk(101, 110.05, 95.05, 104, 100, 1)]
-    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 1 && s.id === 'candle_tweezer')
-    expect(tweezers.map((s) => s.side).sort()).toEqual(['bearish', 'bullish'])
+  it('트위저: 저점과 고점이 모두 일치해도 한쪽 side만 발생한다 (회귀 — 과거엔 양쪽 다 발생했다)', () => {
+    const lead = Array.from({ length: 20 }, (_, i) => mk(100, 102, 98, 100, 100, i))
+    // 현재 봉의 고점·저점 모두 직전 봉과 ATR 허용오차 이내로 일치시킨다 —
+    // 예전 코드라면 이 조건에서 candle_tweezer 가 양방향으로 동시 발화했다.
+    const cs = [...lead, mk(100, 108, 95, 103, 100, 20), mk(101, 108.05, 95.05, 96, 100, 21)]
+    const tweezers = detectCandlePatterns(cs).filter((s) => s.barIndex === 21 && s.id.startsWith('tweezer_'))
+    expect(tweezers).toHaveLength(1)
+    expect(tweezers[0].id).toBe('tweezer_top')
   })
 
   it('look-ahead를 위반하지 않는다', () => {
@@ -227,5 +236,51 @@ describe('candle_tri_star', () => {
       mk(100, 101, 99, 99.97, 200, 2),
     ]
     expect(idsAt(cs, 2)).not.toContain('candle_tri_star')
+  })
+})
+
+describe('트위저 분리와 임계값', () => {
+  // ATR을 안정시키기 위한 도입부 20봉
+  const lead = () => Array.from({ length: 20 }, (_, i) => mk(100, 102, 98, 100, 100, i))
+
+  it('색이 반대이고 저점이 일치하면 tweezer_bottom 을 낸다', () => {
+    const cs = [...lead(), mk(100, 101, 95, 96, 100, 20), mk(96, 101, 95, 100, 100, 21)]
+    const ids = detectCandlePatterns(cs).filter(s => s.barIndex === 21).map(s => s.id)
+    expect(ids).toContain('tweezer_bottom')
+    expect(ids).not.toContain('candle_tweezer')
+  })
+
+  it('색이 반대이고 고점이 일치하면 tweezer_top 을 낸다', () => {
+    const cs = [...lead(), mk(96, 105, 95, 100, 100, 20), mk(100, 105, 95, 96, 100, 21)]
+    const ids = detectCandlePatterns(cs).filter(s => s.barIndex === 21).map(s => s.id)
+    expect(ids).toContain('tweezer_top')
+  })
+
+  it('두 봉의 색이 같으면 트위저를 내지 않는다', () => {
+    const cs = [...lead(), mk(96, 101, 95, 100, 100, 20), mk(96, 101, 95, 100, 100, 21)]
+    const ids = detectCandlePatterns(cs).filter(s => s.barIndex === 21).map(s => s.id)
+    expect(ids).not.toContain('tweezer_bottom')
+    expect(ids).not.toContain('tweezer_top')
+  })
+
+  it('저점 차이가 ATR의 10%를 넘으면 내지 않는다', () => {
+    // lead 의 TR 은 4 이므로 ATR ≈ 4, 허용오차 ≈ 0.4. 저점을 2 만큼 벌린다.
+    const cs = [...lead(), mk(100, 101, 95, 96, 100, 20), mk(96, 101, 97, 100, 100, 21)]
+    const ids = detectCandlePatterns(cs).filter(s => s.barIndex === 21).map(s => s.id)
+    expect(ids).not.toContain('tweezer_bottom')
+  })
+
+  it('한 봉에서 상반된 side 의 트위저가 동시에 나오지 않는다', () => {
+    const cs = synthCandles(400)
+    const sigs = detectCandlePatterns(cs).filter(s => s.id.startsWith('tweezer_'))
+    const byBar = new Map<number, Set<string>>()
+    for (const s of sigs) {
+      const set = byBar.get(s.barIndex) ?? new Set()
+      set.add(s.side)
+      byBar.set(s.barIndex, set)
+    }
+    for (const [bar, sides] of byBar) {
+      expect(sides.size, `bar ${bar} 에서 양방향 동시 발화`).toBe(1)
+    }
   })
 })

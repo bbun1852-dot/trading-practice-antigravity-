@@ -6,12 +6,17 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "script": "tsx",
+    "calibrate": "tsx scripts/calibrate.ts",
+    "drill": "tsx scripts/drill.ts"
   },
   "dependencies": {
     "idb": "^8.0.3"
   },
   "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.8",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"

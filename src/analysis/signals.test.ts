@@ -19,6 +19,14 @@ describe('detectAll', () => {
   it('통합 감지기 전체가 look-ahead를 위반하지 않는다', () => {
     assertNoLookAhead(detectAll, candles)
   })
+
+  it('detectAll 은 결정론적이다 — 같은 입력이면 같은 순서', () => {
+    const cs = synthCandles(500)
+    const a = detectAll(cs)
+    const b = detectAll(cs)
+    expect(a).toEqual(b)
+    expect(a.map(s => `${s.barIndex}|${s.id}`)).toEqual(b.map(s => `${s.barIndex}|${s.id}`))
+  })
 })
 
 describe('detectSignals', () => {
