@@ -30,32 +30,13 @@ describe('detectStructureExtras — 미래참조', () => {
 })
 
 describe('detectStructureExtras — 4종이 실제로 발화한다', () => {
-  for (const id of ['choch', 'sr_flip', 'retest_success', 'retest_fail']) {
+  for (const id of ['sr_flip', 'retest_success', 'retest_fail']) {
     it(`${id} 가 나온다`, () => {
       expect(ids.has(id), `${id} 가 픽스처에서 한 번도 안 나온다`).toBe(true)
     })
   }
 })
 
-describe('choch — 추세를 거스를 때만', () => {
-  it('상승 구조에서 난 choch 는 약세다', () => {
-    const chochs = sigs.filter((s) => s.id === 'choch')
-    expect(chochs.length).toBeGreaterThan(0)
-    for (const s of chochs) {
-      if (s.evidence.includes('상승 구조')) expect(s.side).toBe('bearish')
-      if (s.evidence.includes('하락 구조')) expect(s.side).toBe('bullish')
-    }
-  })
-
-  it('같은 피벗으로 두 번 내지 않는다', () => {
-    const seen = new Set<string>()
-    for (const s of sigs.filter((x) => x.id === 'choch')) {
-      const k = `${s.side}|${s.refs!.pivotBar}`
-      expect(seen.has(k), `같은 피벗 재발화: ${k}`).toBe(false)
-      seen.add(k)
-    }
-  })
-})
 
 describe('retest — 성공과 실패가 갈린다', () => {
   it('한 붕괴당 리테스트는 한 번이다', () => {

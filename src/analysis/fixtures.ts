@@ -20,7 +20,7 @@ function rng(seed: number) {
  * 쓰면 갭이 원천적으로 생길 수 없다). 각 반복마다 rand() 를 정확히 같은 순서·횟수로
  * 호출하므로 접두 안정성(synthCandles(m, s) === synthCandles(n, s).slice(0, m))은 깨지지 않는다.
  */
-export function synthCandles(n: number, seed = 42): Candle[] {
+export function synthCandles(n: number, seed = 42, interval = 14400): Candle[] {
   const rand = rng(seed)
   const out: Candle[] = []
   let price = 100
@@ -39,7 +39,7 @@ export function synthCandles(n: number, seed = 42): Candle[] {
     const high = Math.max(open, close) + rand() * 1.5
     const low = Math.min(open, close) - rand() * 1.5
     out.push({
-      time: 1600000000 + i * 14400,
+      time: 1600000000 + i * interval,
       open, high, low, close,
       volume: 100 + rand() * 400,
     })

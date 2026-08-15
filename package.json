@@ -8,6 +8,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "script": "tsx",
+    "verify": "tsx scripts/verify.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "drill": "tsx scripts/drill.ts"
   },
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "fake-indexeddb": "^6.2.5",
     "tsx": "^4.23.8",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",

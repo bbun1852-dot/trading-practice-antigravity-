@@ -44,6 +44,8 @@ export type Question = {
   difficulty: Difficulty
   /** 은닉 구간을 포함한 창 전체. 솔버에게는 decisionIndex 까지만 잘라서 보여준다(solverView) */
   candles: Candle[]
+  /** 실제 상위 타임프레임(HTF) 캔들. 이 역시 은닉 구간이 포함될 수 있으며 solverView에서 잘린다 */
+  htfCandles: Candle[]
 }
 
 /**
@@ -58,6 +60,8 @@ export type SolverView = {
   difficulty: Difficulty
   /** decisionIndex 까지만. 마지막 원소가 곧 결정 봉이다 */
   candles: Candle[]
+  /** 결정 시점(decisionIndex)까지 닫힌 상위 타임프레임(HTF) 캔들만 */
+  htfCandles: Candle[]
 }
 
 export type Answer = {

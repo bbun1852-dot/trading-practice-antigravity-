@@ -99,6 +99,10 @@ describe('taxonomy 정합성', () => {
     ['wyckoff_bu', WYCKOFF_SYNTH_REASON],
     ['wyckoff_utad', WYCKOFF_SYNTH_REASON],
     ['wyckoff_shakeout', WYCKOFF_SYNTH_REASON],
+    // ── 상위 타임프레임(HTF) 3종 ──
+    ['htf_trend', 'HTF 캔들을 명시적으로 주입하지 않으면 배출되지 않는다.'],
+    ['htf_bos', 'HTF 캔들을 명시적으로 주입하지 않으면 배출되지 않는다.'],
+    ['htf_poi', 'HTF 캔들을 명시적으로 주입하지 않으면 배출되지 않는다.'],
   ])
 
   /**
