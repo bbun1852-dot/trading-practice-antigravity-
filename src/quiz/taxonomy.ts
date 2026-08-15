@@ -46,6 +46,13 @@ const WEIGHT: Record<string, number> = {
   // 이동평균은 크로스와 배열을 나눈다. 크로스는 구조 변화가 끝난 뒤에 뒤늦게 뜨는
   // 후행 신호지만, 배열은 현재 추세의 밀도와 관성을 보여주므로 신뢰도가 더 높다.
   ma_aligned_bull: 3, ma_aligned_bear: 3,
+  // Part 3 신규. 스펙 6.3 이 피보를 "기하학적 분석" 으로, 6.1 이 매물대를 수급으로
+  // 분류하므로 둘 다 이 3점 그룹이다. 전체 설계 스펙은 volume_node_* 를 Tier 1(원래
+  // 체계 5점)에 뒀지만, 개정 체계에서 Tier 1 자리는 유동성 청산(4점)이고 오더블록조차
+  // 3점으로 내려왔다 — 매물대를 유동성 청산과 같은 급으로 올릴 근거가 노트에 없다.
+  volume_node_high: 3, volume_node_low: 3,
+  fib_retrace_382: 3, fib_retrace_5: 3, fib_retrace_618: 3,
+  fib_extension: 3, fib_confluence: 3,
 
   // Tier 3 (2점) — 모멘텀 & 캔들 신호
   msb_bull: 2, msb_bear: 2,
@@ -114,6 +121,15 @@ export const TAGS: TagDef[] = [
   t('ob_bear_resistance', '약세 오더블록 저항', 1, 'smc', zone(ZONE_MAX_BARS, 'close_through')),
   t('msb_bull', '시장구조 상향 돌파 (BOS/MSB)', 1, 'structure', recent(RECENT_STRUCTURAL)),
   t('msb_bear', '시장구조 하향 붕괴', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  // **매봉 재평가되는 조건이다** — detectVolumeNodes 가 봉마다 창 120봉으로 프로파일을
+  // 다시 만들고 "현재 봉이 노드에 닿았는가" 를 다시 묻는다. bb_squeeze·ma_aligned_* 와
+  // 정확히 같은 성격이라 같은 수명을 준다.
+  //
+  // 처음에 zone(50) 으로 뒀다가 실측하고 되돌렸다(2026-08-09). 매봉 발화하는 신호에
+  // zone(50) 을 주면 같은 자리가 50겹으로 쌓여서, 유효 근거 중앙값이 11 → 42 로
+  // 폭증하고 계열 10/10 이 전부 8~15 게이트를 실패했다.
+  t('volume_node_high', '매물대 (고거래량 노드)', 1, 'volume', bar()),
+  t('volume_node_low', '매물대 공백 (저거래량 노드)', 1, 'volume', bar()),
 
   // ── Tier 2 ──
   // FVG는 detectFVG가 이미 미충족만 배출하므로 zone이 아니라 recent다 (스펙 2.3)
@@ -134,6 +150,17 @@ export const TAGS: TagDef[] = [
   t('bb_squeeze', '볼린저 스퀴즈', 3, 'volatility', bar()),
   t('bb_break_upper', '볼린저 상단 돌파', 3, 'volatility', bar()),
   t('bb_break_lower', '볼린저 하단 이탈', 3, 'volatility', bar()),
+
+  // ── Tier 3: 피보나치 (Part 3) ──
+  // 되돌림·확장 터치는 그 순간의 사건이다 — 지표의 순간 사건과 같은 눈금을 쓴다.
+  t('fib_retrace_382', '피보 되돌림 38.2%', 3, 'fib', recent(RECENT_MOMENTARY)),
+  t('fib_retrace_5', '피보 되돌림 50%', 3, 'fib', recent(RECENT_MOMENTARY)),
+  t('fib_retrace_618', '피보 되돌림 61.8% (골든 포켓)', 3, 'fib', recent(RECENT_MOMENTARY)),
+  t('fib_extension', '피보 확장 목표 도달', 3, 'fib', recent(RECENT_MOMENTARY)),
+  // 중첩도 되돌림 "터치" 라는 같은 사건이다. 처음엔 "수급 구간과 겹친 자리라 오래 짚을
+  // 만하다" 며 recent(14) 로 뒀는데, 실측하니 혼자서 전체 유효 근거의 17.4%(1153/6608)를
+  // 먹었다 — 다른 피보 터치(recent(4))의 5배다. 수명만 3.5배로 준 것에 근거가 없었다.
+  t('fib_confluence', '피보 + 오더블록/FVG 중첩', 3, 'fib', recent(RECENT_MOMENTARY)),
 
   // ── Tier 4: 캔들패턴 17종 ──
   t('candle_hammer', '해머', 4, 'candle', bar()),

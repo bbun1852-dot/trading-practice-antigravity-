@@ -5,6 +5,8 @@ import { detectFVG, detectOrderBlocks, detectLiquiditySweep, detectMSB } from '.
 import { detectCandlePatterns } from './candlePatterns'
 import { detectDivergence } from './divergence'
 import { detectIndicatorSignals } from './indicatorSignals'
+import { detectVolumeNodes } from './volumeProfile'
+import { detectFibonacci } from './fibonacci'
 
 const DETECTORS = [
   detectTrend,
@@ -15,6 +17,8 @@ const DETECTORS = [
   detectCandlePatterns,
   detectDivergence,
   detectIndicatorSignals,
+  detectVolumeNodes,
+  detectFibonacci,
 ]
 
 /** 주어진 캔들 배열 전체에 대해 모든 감지기를 돌린다 */

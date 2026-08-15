@@ -102,8 +102,9 @@ describe('태그 커버리지', () => {
   })
 
   it('감지기가 없는 항목의 배점 합을 보고한다', () => {
-    // 스윙: 차트패턴 4 + 추세선 2 + 피보나치 2 = 8. 장기: 차트패턴 5.
-    expect(ruleCheck([], '4h').dormantWeight).toBe(8)
+    // 스윙: 차트패턴 4 + 추세선 2 = 6. 장기: 차트패턴 5.
+    // Part 3 에서 피보나치 감지기가 생겨 그 행(2점)이 살아났다 — 8 에서 6 으로 내려간다.
+    expect(ruleCheck([], '4h').dormantWeight).toBe(6)
     expect(ruleCheck([], '1d').dormantWeight).toBe(5)
     expect(ruleCheck([], '15m').dormantWeight).toBe(0)
   })
