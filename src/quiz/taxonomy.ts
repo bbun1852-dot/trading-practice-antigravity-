@@ -81,6 +81,28 @@ const WEIGHT: Record<string, number> = {
   // 그 차이는 strength(3) 로 표현되지 배점으로 표현되지 않는다.
   ob_double_engulfing: 3,
   bb_walking: 3, obv_trend_confirm: 3,
+  // Part 5. 기하 작도 계열이므로 "수급 & 기하학적 분석" 3점 그룹이다.
+  trendline_support: 3, trendline_resistance: 3, trendline_break: 3,
+  channel_upper: 3, channel_lower: 3,
+  
+  // Part 6. 차트패턴 16종. 기하 작도 계열이므로 3점.
+  pattern_double_top: 3, pattern_double_bottom: 3,
+  pattern_triple_top: 3, pattern_triple_bottom: 3,
+  pattern_head_shoulders: 3, pattern_inv_head_shoulders: 3,
+  pattern_sym_triangle: 3, pattern_asc_triangle: 3, pattern_desc_triangle: 3,
+  pattern_rising_wedge: 3, pattern_falling_wedge: 3,
+  pattern_bull_flag: 3, pattern_bear_flag: 3,
+  pattern_bear_pennant: 3,
+  pattern_rectangle: 3,
+
+  // Part 6. 와이코프 11종. 복합 패턴이므로 3~4점.
+  wyckoff_ps: 3, wyckoff_climax: 4, wyckoff_ar: 3, wyckoff_st: 3,
+  wyckoff_spring_ut: 4, wyckoff_test: 3, wyckoff_sos_sow: 4,
+  wyckoff_lps_lpsy: 3, wyckoff_bu: 3, wyckoff_utad: 4, wyckoff_shakeout: 4,
+
+  // Part 6. 상위 타임프레임(HTF) 3종.
+  htf_trend: 3, htf_bos: 4, htf_poi: 4,
+
   rsi_failure_swing: 2, macd_hist_turn: 2, ma_support: 2, ma_resistance: 2,
 
   // Tier 3 (2점) — 모멘텀 & 캔들 신호
@@ -122,13 +144,19 @@ const WEIGHT: Record<string, number> = {
 // 12.5 → 18 로 대역(8~15)을 벗어났다. "구조 사건은 레벨을 남기므로 오래 짚을 만하다"
 // 는 성질은 그대로지만, 그런 사건 자체가 늘었으므로 한 사건이 머무는 시간을 줄이는
 // 것이 대역을 지키는 방법이다. 값을 바꾸면 calibrate 를 반드시 다시 돌려야 한다.
-const RECENT_STRUCTURAL = 10
+// Part 5 에서 10 → 8. 이 수명을 쓰는 태그가 Part 3 의 5종에서 9종(스윕 2·MSB 2·
+// sr_flip·retest 2·choch·liq_pool)으로 늘었다. 한 클래스에 태그가 몰릴수록 그 클래스의
+// 수명이 전체 근거량을 좌우한다.
+const RECENT_STRUCTURAL = 8
 const RECENT_MOMENTARY = 4
 // **2026-08-10 (Part 4) 재확정: 50 → 35.** RECENT_STRUCTURAL 과 같은 이유다. 태그가
 // 71종이 되자 오더블록 2종이 유효 근거의 23%(1484/6398)로 최대 기여자가 됐다 — 수명이
 // zone(50) 이라 한 자리가 오래 겹쳐 산다. 50 은 태그 49종 시절에 정한 값이고, 근거가
 // 늘어난 지금은 한 자리가 머무는 시간을 줄이는 것이 대역을 지키는 방법이다.
-const ZONE_MAX_BARS = 30
+// Part 5 에서 30 → 25. 태그가 76종이 되며 오더블록 2종이 여전히 최대 기여자(17.2%)라
+// 계열 2개가 근거 대역을 벗어났다. 파트마다 태그가 늘 때 이 값을 다시 재는 것이
+// 이제 정착된 절차다 (50 → 35 → 30 → 25).
+const ZONE_MAX_BARS = 25
 /**
  * 자석 효과의 수명. 오더블록보다 훨씬 짧다 — 오더블록은 "거기 물량이 있다" 는 사실이라
  * 오래 가지만, 리밸런스는 "지금 그쪽으로 가고 있다" 는 진행 상태라 금방 낡는다.
@@ -221,6 +249,59 @@ export const TAGS: TagDef[] = [
   t('bb_break_lower', '볼린저 하단 이탈', 3, 'volatility', bar()),
   // 런이 3봉에 도달한 봉에서만 나는 사건이라 bar 가 아니라 recent 다.
   t('bb_walking', '볼린저 밴드 타기', 3, 'volatility', recent(RECENT_MOMENTARY)),
+
+  // ── Tier 3: 추세선·채널 (Part 5) — **첫 B등급 태그** ──
+  //
+  // 추세선은 작도 기준에 따라 답이 달라진다: 어느 피벗을 잇느냐, 꼬리를 쓰느냐
+  // 종가를 쓰느냐에 따라 선이 움직이고 사람마다 다르게 긋는다. 엔진이 그은 선과
+  // 사용자가 그은 선이 다를 수 있으므로 헛다리 감점을 절반만 적용한다(스펙 6.7).
+  // 여기가 grader.ts 의 CONFIDENCE_FACTOR.B 를 처음으로 실제로 쓰는 자리다 —
+  // Part 2 에서 만들어 두고 Part 4 까지 한 번도 실행되지 않았다.
+  t('trendline_support', '상승 추세선 지지', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('trendline_resistance', '하락 추세선 저항', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  // 이탈도 순간 사건으로 둔다. 처음엔 "구조 사건이라 오래 짚을 만하다" 며
+  // recent(10) 을 줬는데, 이탈은 그 선을 죽이므로 뒤이어 다시 짚을 대상이 없다 —
+  // 오래 남겨 둘 이유가 없고 실측에서도 계열 2개가 근거 대역을 벗어났다.
+  t('trendline_break', '추세선 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('channel_upper', '채널 상단', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('channel_lower', '채널 하단', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+
+  // ── Tier 3: 차트패턴 16종 (Part 6) ──
+  t('pattern_double_top', '이중 천정 (쌍봉)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_double_bottom', '이중 바닥 (쌍바닥)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_triple_top', '삼중 천정 (삼산)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_triple_bottom', '삼중 바닥 (삼천)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_head_shoulders', '헤드앤숄더', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_inv_head_shoulders', '역헤드앤숄더', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_sym_triangle', '대칭 삼각수렴 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_asc_triangle', '상승 삼각수렴 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_desc_triangle', '하락 삼각수렴 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_rising_wedge', '상승 쐐기형 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_falling_wedge', '하락 쐐기형 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_bull_flag', '상승 플래그 돌파', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_bear_flag', '하락 플래그 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  // pattern_bull_pennant 은 등재하지 않는다 — 28,000봉에서 0회이고 구조적으로
+  // 임계값에 못 닿는다. 근거는 chartPatterns.ts 의 해당 주석에 있다.
+  t('pattern_bear_pennant', '하락 페넌트 이탈', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('pattern_rectangle', '박스권 돌파 (직사각형)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+
+  // ── Tier 3: 와이코프 11종 (Part 6). 국면 라벨링이라 전부 B등급이다 ──
+  t('wyckoff_ps', '와이코프 PS (예비 지지/저항)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_climax', '와이코프 SC/BC (클라이맥스)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_ar', '와이코프 AR (자동 랠리/반락)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_st', '와이코프 ST (2차 테스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_spring_ut', '와이코프 Spring/UT (스프링/업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_test', '와이코프 Test (테스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_sos_sow', '와이코프 SOS/SOW (강세/약세 신호)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_lps_lpsy', '와이코프 LPS/LPSY (마지막 지지/저항)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_bu', '와이코프 BU/BUEC (백업)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_utad', '와이코프 UTAD (분배 후 업트러스트)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+  t('wyckoff_shakeout', '와이코프 Shakeout (터미널 쉐이크아웃)', 3, 'pattern', recent(RECENT_MOMENTARY), 'B'),
+
+  // ── Tier 3: 상위 타임프레임 3종 (Part 6). 4봉 묶음 합성이라 전부 B등급이다 ──
+  t('htf_trend', '상위 타임프레임(HTF) 추세 정렬', 3, 'structure', recent(RECENT_STRUCTURAL), 'B'),
+  t('htf_bos', '상위 타임프레임(HTF) 구조 붕괴', 3, 'structure', recent(RECENT_STRUCTURAL), 'B'),
+  t('htf_poi', '상위 타임프레임(HTF) 주요 구간 진입 (POI)', 3, 'smc', recent(RECENT_STRUCTURAL), 'B'),
 
   // ── Tier 3: 피보나치 (Part 3) ──
   // 되돌림·확장 터치는 그 순간의 사건이다 — 지표의 순간 사건과 같은 눈금을 쓴다.

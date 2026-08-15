@@ -119,6 +119,12 @@ const MA_CROSS_UNSCORED = ['ma_golden_cross', 'ma_dead_cross']
  */
 const MA_TOUCH_UNSCORED = ['ma_support', 'ma_resistance']
 
+/** Part 5 에서 감지기가 생겼다. 스윙 시트의 '추세선' 행이 이걸로 살아난다 */
+const TRENDLINE = [
+  'trendline_support', 'trendline_resistance', 'trendline_break',
+  'channel_upper', 'channel_lower',
+]
+
 /** Part 3 에서 감지기가 생겼다. 스윙 시트의 '피보나치' 행이 이걸로 살아난다 */
 const FIB = ['fib_retrace_382', 'fib_retrace_5', 'fib_retrace_618', 'fib_extension', 'fib_confluence']
 
@@ -130,6 +136,27 @@ const FIB = ['fib_retrace_382', 'fib_retrace_5', 'fib_retrace_618', 'fib_extensi
  * 내가 만든 체계가 된다. 엑셀에 매물대 행을 추가하기로 정하면 그때 살린다.
  */
 const VOLUME_NODE_UNSCORED = ['volume_node_high', 'volume_node_low']
+
+const CHART_PATTERN = [
+  'pattern_double_top', 'pattern_double_bottom', 'pattern_triple_top', 'pattern_triple_bottom',
+  'pattern_head_shoulders', 'pattern_inv_head_shoulders', 'pattern_sym_triangle', 'pattern_asc_triangle',
+  'pattern_desc_triangle', 'pattern_rising_wedge', 'pattern_falling_wedge', 'pattern_rectangle',
+  'pattern_bull_flag', 'pattern_bear_flag', 'pattern_bear_pennant'
+]
+
+/**
+ * 와이코프 패턴 11종 — 엑셀에 항목이 확정되기 전까지 미배점으로 둔다.
+ */
+const WYCKOFF_UNSCORED = [
+  'wyckoff_ps', 'wyckoff_climax', 'wyckoff_ar', 'wyckoff_st', 'wyckoff_spring_ut',
+  'wyckoff_test', 'wyckoff_sos_sow', 'wyckoff_lps_lpsy', 'wyckoff_bu', 'wyckoff_utad',
+  'wyckoff_shakeout'
+]
+
+/**
+ * 상위 타임프레임 (HTF) 3종 — 엑셀에 항목이 확정되기 전까지 미배점으로 둔다.
+ */
+const HTF_UNSCORED = ['htf_trend', 'htf_bos', 'htf_poi']
 
 // ── 프로파일 정의 ────────────────────────────────────────────────────────────
 //
@@ -164,7 +191,8 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
     // 진입 근거로 쓰지 않는다는 뜻이라, 있는 그대로 미배점으로 둔다.
     // 단타 시트에는 피보나치 행도 없다 — 1~15분봉에서 되돌림 레벨을 진입 근거로
     // 쓰지 않는다는 뜻이라, MA·OBV 와 같은 방식으로 미배점에 둔다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...VOLUME_NODE_UNSCORED],
+    // 거시 차트 패턴(CHART_PATTERN)도 단타에는 행이 없다.
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...MA_ALIGN, ...OBV, ...FIB, ...TRENDLINE, ...VOLUME_NODE_UNSCORED, ...CHART_PATTERN, ...WYCKOFF_UNSCORED, ...HTF_UNSCORED],
   },
   swing: {
     id: 'swing',
@@ -176,19 +204,19 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('structure', '추세 구조 (Structure)', 4, true, STRUCTURE),
       r('sweep', '유동성 청산 (Sweep)', 4, true, SWEEP),
       r('fvg', 'FVG (Fair Value Gap)', 4, true, FVG),
-      r('chart_pattern', '거시 차트 패턴', 4, true, []),   // 감지기 미구현 (Part 3)
+      r('chart_pattern', '거시 차트 패턴', 4, true, CHART_PATTERN),
       r('order_block', '일반 오더블럭 (OB)', 3, true, ORDER_BLOCK),
       r('volume', '거래량 (Volume)', 4, false, VOLUME),
       r('obv', 'OBV 누적 수급', 3, false, OBV),
       r('ma_align', '이동평균 배열 (MA)', 3, false, MA_ALIGN),
-      r('trendline', '추세선 (Trendline)', 2, false, []),  // 감지기 미구현 (Part 3)
+      r('trendline', '추세선 (Trendline)', 2, false, TRENDLINE),  // Part 5 에서 살아났다
       r('fibonacci', '피보나치 (Fibonacci)', 2, false, FIB),  // Part 3 에서 살아났다
       r('bollinger', '볼린저 밴드', 3, false, BOLLINGER),
       r('rsi', 'RSI 지표', 2, false, RSI),
       r('macd', 'MACD 지표', 2, false, MACD),
       r('candle', '캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
-    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...VOLUME_NODE_UNSCORED, ...WYCKOFF_UNSCORED, ...HTF_UNSCORED],
   },
   position: {
     id: 'position',
@@ -198,7 +226,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
     synergyBonus: 2,
     rows: [
       r('structure', '거시 추세 구조', 5, true, STRUCTURE),
-      r('chart_pattern', '거시 차트 패턴', 5, true, []),   // 감지기 미구현 (Part 3)
+      r('chart_pattern', '거시 차트 패턴', 5, true, CHART_PATTERN),
       r('order_block', '주요 오더블럭 (OB)', 4, true, ORDER_BLOCK),
       r('sweep', '유동성 청산 (Sweep)', 3, true, SWEEP),
       r('obv', 'OBV 누적 수급', 5, false, OBV),
@@ -211,7 +239,7 @@ export const PROFILES: Record<RuleProfile, ProfileDef> = {
       r('candle', '거시 캔들 패턴', 2, false, [...CANDLE, ...WICK]),
     ],
     // 장기 시트에도 피보나치 행이 없다. 스윙 시트에만 있다.
-    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...FIB, ...VOLUME_NODE_UNSCORED],
+    unscored: [...MA_CROSS_UNSCORED, ...MA_TOUCH_UNSCORED, ...FIB, ...TRENDLINE, ...VOLUME_NODE_UNSCORED, ...WYCKOFF_UNSCORED, ...HTF_UNSCORED],
   },
 }
 

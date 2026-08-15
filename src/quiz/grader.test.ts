@@ -161,8 +161,10 @@ describe('coreSignals', () => {
     expect(coreSignals([...sigs].reverse(), 3).map((s) => s.id)).toEqual(forward)
   })
 
-  it('기본 K 는 실측으로 정한 5 다', () => {
-    expect(DEFAULT_CORE_K).toBe(5)
+  it('기본 K 는 실측으로 정한 6 이다', () => {
+    // Part 2 에서 5 로 정했다가 Part 6(태그 106종)에서 6 으로 올렸다. 태그가 늘면
+    // 같은 K 의 커버리지가 내려가 5 는 중앙 59.3% 로 대역(60~80) 밖으로 나간다.
+    expect(DEFAULT_CORE_K).toBe(6)
   })
 })
 
@@ -452,8 +454,16 @@ describe('헛다리 감점의 confidence 차등 — A 100% / B 50% / C 0%', () =
     expect(TAG_BY_ID.has('tmp_a1')).toBe(false)
   })
 
-  it('현재 taxonomy 는 전부 A 다 — B·C 는 Part 3 에서 들어온다', () => {
-    expect([...TAG_BY_ID.values()].every((d) => d.confidence === 'A')).toBe(true)
+  /**
+   * Part 2 가 "현재 taxonomy 는 전부 A 다 — B·C 는 나중에 들어온다" 로 심어 둔
+   * 자리다. Part 5 에서 추세선 5종이 B 로 들어오며 그 전제가 깨졌고, 이제는
+   * **A 와 B 가 공존한다**는 것을 고정한다. C 는 아직 없다(와이코프·하모닉 파트).
+   */
+  it('A 와 B 가 공존하고 C 는 아직 없다', () => {
+    const grades = new Set([...TAG_BY_ID.values()].map((d) => d.confidence))
+    expect(grades.has('A')).toBe(true)
+    expect(grades.has('B')).toBe(true)
+    expect(grades.has('C')).toBe(false)
   })
 })
 
@@ -648,6 +658,56 @@ describe('grade — 성립하지 않는 주문', () => {
       direction: 'long', entry: 112.91, stopLoss: 107, takeProfit: 118, tags: [],
     })
     expect(r.execution.orderValid).toBe(true)
+  })
+})
+
+/**
+ * Part 5 게이트 7 — B등급 경로가 실제로 켜졌는지 고정한다.
+ *
+ * CONFIDENCE_FACTOR 는 Part 2 에서 만들어졌지만 Part 4 까지 **모든 태그가 A등급이라
+ * 한 번도 실행되지 않았다.** 추세선 5종이 첫 B등급 소비자다. 이 검사가 없으면
+ * "B 를 도입했는데 감점이 그대로였다" 를 아무도 모른다.
+ */
+describe('confidence 등급별 감점 차등', () => {
+  it('B등급 헛다리는 A등급의 절반만 깎는다', () => {
+    const a = falseClaimPenalty('liq_sweep_low')       // A등급
+    const b = falseClaimPenalty('trendline_support')   // B등급
+    expect(a).toBe(FALSE_CLAIM_PENALTY)
+    expect(b).toBe(FALSE_CLAIM_PENALTY / 2)
+  })
+
+  it('추세선 5종이 전부 B등급이다', () => {
+    for (const id of ['trendline_support', 'trendline_resistance', 'trendline_break',
+      'channel_upper', 'channel_lower']) {
+      expect(TAG_BY_ID.get(id)?.confidence, `${id} 가 B등급이 아니다`).toBe('B')
+    }
+  })
+
+  /**
+   * Part 6 — 작도·라벨링 계열은 전부 B다.
+   *
+   * 와이코프 5종이 A등급으로 등재돼 있었는데 감지기는 스스로를 휴리스틱이라 표시하고
+   * 있었다(confidence 'B'·'C'). falseClaimPenalty 는 taxonomy 를 읽으므로, 국면
+   * 라벨링처럼 사람마다 답이 갈리는 태그에 A등급 만점 감점이 매겨지고 있었다.
+   *
+   * 와이코프는 어디부터를 TR 로 보느냐에 따라 답이 달라지고, HTF 는 진짜 상위
+   * 데이터가 아니라 4봉 묶음 합성이라 사용자가 실제 상위 차트에서 본 것과 다를 수
+   * 있다. 추세선과 같은 이유로 절반만 깎는다.
+   */
+  it('와이코프 11종과 HTF 3종이 전부 B등급이다', () => {
+    const ids = [
+      'wyckoff_ps', 'wyckoff_climax', 'wyckoff_ar', 'wyckoff_st', 'wyckoff_spring_ut',
+      'wyckoff_test', 'wyckoff_sos_sow', 'wyckoff_lps_lpsy', 'wyckoff_bu',
+      'wyckoff_utad', 'wyckoff_shakeout',
+      'htf_trend', 'htf_bos', 'htf_poi',
+    ]
+    for (const id of ids) {
+      expect(TAG_BY_ID.get(id)?.confidence, `${id} 가 B등급이 아니다`).toBe('B')
+    }
+  })
+
+  it('taxonomy 에 없는 id 는 A로 본다 — 확인할 방법이 없는 주장이 가장 센 헛다리다', () => {
+    expect(falseClaimPenalty('존재하지_않는_태그')).toBe(FALSE_CLAIM_PENALTY)
   })
 })
 

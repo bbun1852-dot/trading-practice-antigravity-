@@ -175,17 +175,20 @@ describe('difficultyOf', () => {
     expect(difficultyOf(s)).toBe('hard')
   })
 
-  it('우세한 쪽이 3배 이상이면 easy', () => {
-    // bullish 4×2=8, bearish 1×2=2 → 쏠림도 0.80 ≥ 0.75
+  // EASY_AGREEMENT 는 파트마다 태그가 늘 때 재확정된다(0.75 → 0.70, Part 5).
+  // 아래 두 검사는 그 경계의 양쪽을 리터럴로 못박는다 — 상수를 참조하면 값이 바뀔 때
+  // 검사도 함께 따라 내려가 아무것도 지키지 못한다.
+  it('우세한 쪽이 7:3 이상이면 easy', () => {
+    // bullish 4×2=8, bearish 1×2=2 → 쏠림도 0.80 ≥ 0.70
     const s = [...BULL_CANDLES.slice(0, 4).map((id) => sig(id, 'bullish')), sig(BEAR_CANDLES[0], 'bearish')]
     expect(difficultyOf(s)).toBe('easy')
   })
 
-  it('우세하지만 3배에는 못 미치면 medium', () => {
-    // bullish 5×2=10, bearish 2×2=4 → 쏠림도 0.714 (0.62 이상 0.75 미만)
+  it('우세하지만 7:3 에는 못 미치면 medium', () => {
+    // bullish 5×2=10, bearish 3×2=6 → 쏠림도 0.625 (0.62 이상 0.70 미만)
     const s = [
       ...BULL_CANDLES.map((id) => sig(id, 'bullish')),
-      ...BEAR_CANDLES.slice(0, 2).map((id) => sig(id, 'bearish')),
+      ...BEAR_CANDLES.slice(0, 3).map((id) => sig(id, 'bearish')),
     ]
     expect(difficultyOf(s)).toBe('medium')
   })
