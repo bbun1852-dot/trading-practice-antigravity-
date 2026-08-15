@@ -54,6 +54,35 @@ const WEIGHT: Record<string, number> = {
   fib_retrace_382: 3, fib_retrace_5: 3, fib_retrace_618: 3,
   fib_extension: 3, fib_confluence: 3,
 
+  // Part 4 신규 15종. 그룹은 위 표를 그대로 따른다 — 4점은 구조·유동성·FVG·거래량,
+  // 3점은 수급·기하, 2점은 모멘텀이다.
+  /**
+   * **choch 만 2점이다 — 구조 붕괴가 아니라 그 붕괴에 붙는 수식어이기 때문이다.**
+   *
+   * 실측(2026-08-10, 심볼 5종 × 4h/1d): choch 248회 중 243회(98.0%)가 msb_* 와
+   * 같은 봉에서 났다. 개념상 당연하다 — SMC 에서 BOS 와 CHoCH 는 같은 붕괴에 붙는
+   * 상호배타적 라벨(연속이냐 반전이냐)인데, detectMSB 가 모든 붕괴를 이미 MSB 로
+   * 라벨링하므로 choch 는 그 위에 얹히는 두 번째 라벨이 된다.
+   *
+   * 4점으로 두면 한 번의 구조 붕괴가 choch(4) + msb_*(2) = 6점을 받아, 가장 흔한
+   * 구조 사건에서 점수가 부푼다. 2점이면 합이 4점이 되어 "구조가 깨졌고 그것이
+   * 추세를 거슬렀다" 에 걸맞다.
+   *
+   * 같은 봉의 msb_* 를 억제하는 방식도 검토했으나 그러면 choch 가 10계열 통틀어
+   * 5회만 남아 사실상 죽는다 — 독립적인 신호가 거의 없다는 것이 실측 결론이다.
+   * 제대로 가르려면 detectMSB 를 BOS/CHoCH 로 갈라 내야 하고, 그건 Part 1 감지기를
+   * 건드리는 별도 파트다.
+   */
+  choch: 2,
+  sr_flip: 4, retest_success: 4, retest_fail: 4,
+  liq_pool_untapped: 4, fvg_rebalance: 4,
+  vol_divergence: 4, vol_absorption: 4,
+  // 오더블록 계열이므로 오더블록과 같은 3점이다. 단독 오더블록보다 강한 흔적이지만
+  // 그 차이는 strength(3) 로 표현되지 배점으로 표현되지 않는다.
+  ob_double_engulfing: 3,
+  bb_walking: 3, obv_trend_confirm: 3,
+  rsi_failure_swing: 2, macd_hist_turn: 2, ma_support: 2, ma_resistance: 2,
+
   // Tier 3 (2점) — 모멘텀 & 캔들 신호
   msb_bull: 2, msb_bear: 2,
   ma_golden_cross: 2, ma_dead_cross: 2,
@@ -88,9 +117,24 @@ const WEIGHT: Record<string, number> = {
 // 확정값에서의 실측(2026-08-06 측정): 계열별 중앙값 10.0~12.0 — 10개 계열 전부
 // 8~15 통과. 풀링 분포 최소 2 / p25 9 / 중앙 11 / p75 13 / 최대 22.
 // 49종 중 한 번도 유효하지 않은 태그는 0종이다.
-const RECENT_STRUCTURAL = 14
+// **2026-08-10 (Part 4) 재확정: 14 → 10.** 태그가 56 → 71종이 되며 구조 계열에만
+// choch·sr_flip·retest_*·liq_pool_untapped 다섯이 더해졌고, 유효 근거 중앙값이
+// 12.5 → 18 로 대역(8~15)을 벗어났다. "구조 사건은 레벨을 남기므로 오래 짚을 만하다"
+// 는 성질은 그대로지만, 그런 사건 자체가 늘었으므로 한 사건이 머무는 시간을 줄이는
+// 것이 대역을 지키는 방법이다. 값을 바꾸면 calibrate 를 반드시 다시 돌려야 한다.
+const RECENT_STRUCTURAL = 10
 const RECENT_MOMENTARY = 4
-const ZONE_MAX_BARS = 50
+// **2026-08-10 (Part 4) 재확정: 50 → 35.** RECENT_STRUCTURAL 과 같은 이유다. 태그가
+// 71종이 되자 오더블록 2종이 유효 근거의 23%(1484/6398)로 최대 기여자가 됐다 — 수명이
+// zone(50) 이라 한 자리가 오래 겹쳐 산다. 50 은 태그 49종 시절에 정한 값이고, 근거가
+// 늘어난 지금은 한 자리가 머무는 시간을 줄이는 것이 대역을 지키는 방법이다.
+const ZONE_MAX_BARS = 30
+/**
+ * 자석 효과의 수명. 오더블록보다 훨씬 짧다 — 오더블록은 "거기 물량이 있다" 는 사실이라
+ * 오래 가지만, 리밸런스는 "지금 그쪽으로 가고 있다" 는 진행 상태라 금방 낡는다.
+ * 15봉 안에 닿지 않았으면 그 접근은 무산된 것으로 본다.
+ */
+const REBALANCE_MAX_BARS = 15
 
 const bar = (): LifetimeClass => ({ kind: 'bar' })
 const recent = (bars: number): LifetimeClass => ({ kind: 'recent', bars })
@@ -131,6 +175,23 @@ export const TAGS: TagDef[] = [
   t('volume_node_high', '매물대 (고거래량 노드)', 1, 'volume', bar()),
   t('volume_node_low', '매물대 공백 (저거래량 노드)', 1, 'volume', bar()),
 
+  // ── Tier 1: 구조·유동성 (Part 4) ──
+  t('choch', 'CHoCH (성격 전환)', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  t('sr_flip', 'S/R 플립 (저항↔지지 전환)', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  t('retest_success', '리테스트 성공', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  t('retest_fail', '리테스트 실패 (페이크아웃)', 1, 'structure', recent(RECENT_STRUCTURAL)),
+  t('liq_pool_untapped', '미체결 유동성 구간 존재', 1, 'smc', recent(RECENT_STRUCTURAL)),
+  /**
+   * 구간이 아니라 **성질 표시**라 zone 이 아니다.
+   *
+   * 처음엔 오더블록과 같은 zone(30) 을 줬는데, 이 태그는 언제나 ob_bull_support /
+   * ob_bear_resistance 와 같은 봉에서 함께 난다(같은 오더블록을 가리키므로 당연하다).
+   * 구간을 두 태그가 나란히 들고 있으면 같은 자리가 두 겹으로 쌓여 유효 근거가
+   * 부푼다 — 구간은 ob_* 가 들고, 이쪽은 "그 오더블록이 이중장악이었다" 는 사실만
+   * 짧게 남긴다.
+   */
+  t('ob_double_engulfing', '이중장악형 오더블록', 1, 'smc', recent(RECENT_MOMENTARY)),
+
   // ── Tier 2 ──
   // FVG는 detectFVG가 이미 미충족만 배출하므로 zone이 아니라 recent다 (스펙 2.3)
   t('fvg_bull', '상승 FVG (미충족)', 2, 'smc', recent(RECENT_STRUCTURAL)),
@@ -138,6 +199,14 @@ export const TAGS: TagDef[] = [
   t('vol_breakout_confirm', '돌파 시 거래량 급증', 2, 'volume', recent(RECENT_MOMENTARY)),
   t('vol_breakout_weak', '거래량 없는 돌파 (트랩)', 2, 'volume', recent(RECENT_MOMENTARY)),
   t('vol_climax', '거래량 클라이맥스', 2, 'volume', recent(RECENT_MOMENTARY)),
+  t('vol_divergence', '거래량 다이버전스 (힘없는 돌파)', 2, 'volume', recent(RECENT_MOMENTARY)),
+  t('vol_absorption', '흡수 (대량 거래에도 안 밀림)', 2, 'volume', recent(RECENT_MOMENTARY)),
+  /**
+   * **`'touch'` 무효화 분기의 첫 소비자다.** Part 2 설계 스펙 §170 이 이 태그를 위해
+   * 그 분기를 미리 구현해 뒀다고 적었고, Part 3 까지 도달 불가로 남아 있었다.
+   * 자석 효과는 가격이 갭에 닿는 순간 끝나므로 touch 가 정확한 의미다.
+   */
+  t('fvg_rebalance', 'FVG 리밸런스 진행 중 (자석)', 2, 'smc', zone(REBALANCE_MAX_BARS, 'touch')),
 
   // ── Tier 3 ──
   // trend_up/down/range 는 한 변수의 상호배타적 세 값이므로 같은 group('trend')로
@@ -150,6 +219,8 @@ export const TAGS: TagDef[] = [
   t('bb_squeeze', '볼린저 스퀴즈', 3, 'volatility', bar()),
   t('bb_break_upper', '볼린저 상단 돌파', 3, 'volatility', bar()),
   t('bb_break_lower', '볼린저 하단 이탈', 3, 'volatility', bar()),
+  // 런이 3봉에 도달한 봉에서만 나는 사건이라 bar 가 아니라 recent 다.
+  t('bb_walking', '볼린저 밴드 타기', 3, 'volatility', recent(RECENT_MOMENTARY)),
 
   // ── Tier 3: 피보나치 (Part 3) ──
   // 되돌림·확장 터치는 그 순간의 사건이다 — 지표의 순간 사건과 같은 눈금을 쓴다.
@@ -201,6 +272,15 @@ export const TAGS: TagDef[] = [
   t('rsi_bear_div', 'RSI 약세 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
   t('rsi_hidden_div', 'RSI 히든 다이버전스', 4, 'momentum', recent(RECENT_MOMENTARY)),
   t('obv_divergence', 'OBV 다이버전스', 4, 'volume', recent(RECENT_MOMENTARY)),
+
+  // ── Tier 4: 지표 (Part 4) ──
+  t('rsi_failure_swing', 'RSI 페일러 스윙', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('macd_hist_turn', 'MACD 히스토그램 방향 전환', 4, 'momentum', recent(RECENT_MOMENTARY)),
+  t('ma_support', '이동평균 지지 (EMA50)', 4, 'ma', recent(RECENT_MOMENTARY)),
+  t('ma_resistance', '이동평균 저항 (EMA50)', 4, 'ma', recent(RECENT_MOMENTARY)),
+  // "종가와 OBV 가 동시에 창의 극값인가" 는 매봉 재평가되는 조건이다 —
+  // bb_squeeze·ma_aligned_*·volume_node_* 와 같은 성격이라 같은 수명을 준다.
+  t('obv_trend_confirm', 'OBV 추세 확인', 4, 'volume', bar()),
 ]
 
 export const TAG_BY_ID = new Map(TAGS.map((d) => [d.id, d]))
