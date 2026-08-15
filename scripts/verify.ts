@@ -76,7 +76,19 @@ const hygiene = step('저장소 위생 — 추적 중인 임시 스크립트', (
 // 암호학적 보안이 아니다 — 목적은 "몰래 못 하게" 하는 것이다. 해시를 맞추려면
 // locked.json 도 같이 고쳐야 하고, 그건 diff 에 대문짝만하게 드러난다.
 
-const sha256 = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex')
+/**
+ * 줄바꿈을 LF 로 정규화하고 해시한다.
+ *
+ * 바이트를 그대로 해시했더니 **checkout 만 해도 잠금이 깨졌다.** 이 저장소는
+ * core.autocrlf=true 라 git 은 LF 로 저장하고 Windows 작업트리엔 CRLF 로 꺼낸다.
+ * 매니페스트를 만든 시점과 다른 브랜치에서 해시를 재면 내용이 같아도 값이 달라진다.
+ * 실제로 스택을 머지한 뒤 master 에서 verify 를 돌리다 잡았다.
+ *
+ * 거짓 경보를 내는 경비는 결국 꺼진다 — 그러면 잠금 자체가 무의미해진다.
+ * 정규화해도 내용 변경은 그대로 잡히므로 잃는 것이 없다.
+ */
+const sha256 = (p: string) =>
+  createHash('sha256').update(readFileSync(p, 'utf8').replace(/\r\n/g, '\n')).digest('hex')
 
 const locked = step('잠긴 파일 무결성', () => {
   const manifestPath = 'scripts/locked.json'
