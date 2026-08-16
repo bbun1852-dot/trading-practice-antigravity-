@@ -3,6 +3,7 @@
  *
  * **U1: 이 화면(과 하위 컴포넌트)은 store 의 `view` 만 읽는다. `question` 금지.**
  */
+import { CandleChart } from '../chart/CandleChart'
 import { useQuizStore } from '../store'
 
 export function AnsweringScreen() {
@@ -16,14 +17,16 @@ export function AnsweringScreen() {
 
   return (
     <div className="answering">
-      <section className="chart-area placeholder">
-        <p>메인 차트 자리 (Task 5)</p>
-        <p data-view-info>
+      <section className="chart-area">
+        <div className="chart-caption" data-view-info>
           {view.timeframe} · {view.difficulty} · 봉 {view.candles.length}개 · 마지막 종가 {last.close}
-        </p>
+        </div>
+        <CandleChart className="chart-canvas" candles={view.candles} />
       </section>
       <aside className="side-area">
-        <div className="placeholder htf">HTF 미니 차트 자리 (Task 5)</div>
+        {view.htfCandles.length > 0
+          ? <CandleChart className="htf" candles={view.htfCandles} compact />
+          : <div className="placeholder htf">상위 TF 봉 없음</div>}
         <div className="placeholder sheet">34점 시트 자리 (Task 6) · 선택 {draft.tags.size}개</div>
       </aside>
       <footer className="answer-bar">

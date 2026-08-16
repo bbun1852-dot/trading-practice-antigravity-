@@ -48,6 +48,12 @@ select {
   padding: 5px 8px; font-size: 13px;
 }
 
+/* 복기 화면 — 차트 한 장 + 하단 바 (리포트는 Task 7) */
+.review {
+  flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 0;
+}
+.review .chart-area { flex: 1; }
+
 /* 풀이 화면 — 스펙 §5.1 배치 */
 .answering {
   flex: 1;
@@ -56,7 +62,16 @@ select {
   grid-template-rows: 1fr auto;
   gap: 8px; padding: 8px;
 }
-.chart-area { grid-column: 1; grid-row: 1; }
+.chart-area {
+  grid-column: 1; grid-row: 1;
+  display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.chart-caption {
+  padding: 6px 10px; font-size: 12px; color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.chart-canvas { flex: 1; min-height: 0; }
 .side-area {
   grid-column: 2; grid-row: 1;
   display: flex; flex-direction: column; gap: 8px; min-height: 0;
