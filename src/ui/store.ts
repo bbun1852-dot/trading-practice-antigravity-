@@ -15,8 +15,15 @@
 import { create } from 'zustand'
 import { solverView } from '../quiz/generator'
 import type { Direction, GradeReport, Question, SolverView } from '../quiz/types'
+import type { DrillTimeframe } from './pipeline'
 
 export type Phase = 'idle' | 'loading' | 'answering' | 'replaying' | 'review'
+
+/**
+ * 다음 문제를 어디서 낼지. 둘 다 null 이 기본이고 "랜덤" 을 뜻한다.
+ * 상태 머신 밖의 값이라 어느 단계에서든 바꿀 수 있다 — 다음 생성부터 반영된다.
+ */
+export type Config = { symbol: string | null; tf: DrillTimeframe | null }
 
 export type Draft = {
   /** null = 아직 방향을 고르지 않음. 기본값을 주지 않는다 — 명시적 선택이 답안이다 */
@@ -33,6 +40,7 @@ const emptyDraft = (): Draft => ({ direction: null, tags: new Set(), memo: '' })
 export type QuizStore = {
   phase: Phase
   notebookOpen: boolean
+  config: Config
   /** answering 화면의 유일한 데이터 소스 (U1) */
   view: SolverView | null
   /** 채점·재생·복기 전용. answering 컴포넌트는 읽지 않는다 (U1) */
@@ -41,6 +49,7 @@ export type QuizStore = {
   report: GradeReport | null
   replay: { revealed: number; playing: boolean; speed: 1 | 4 }
 
+  setConfig(c: Partial<Config>): void
   start(): void
   questionReady(q: Question): void
   setDirection(d: Direction): void
@@ -64,11 +73,16 @@ export function hiddenCount(q: Question): number {
 export const useQuizStore = create<QuizStore>()((set, get) => ({
   phase: 'idle',
   notebookOpen: false,
+  config: { symbol: null, tf: null },
   view: null,
   question: null,
   draft: emptyDraft(),
   report: null,
   replay: { revealed: 0, playing: false, speed: 1 },
+
+  setConfig(c) {
+    set((s) => ({ config: { ...s.config, ...c } }))
+  },
 
   start() {
     if (get().phase !== 'idle') return

@@ -39,6 +39,14 @@ body {
 }
 
 .loading { margin: auto; color: var(--text-dim); }
+.error-detail { color: var(--down); max-width: 460px; font-size: 13px; line-height: 1.5; }
+
+.config-row { display: flex; gap: 20px; color: var(--text-dim); font-size: 13px; }
+select {
+  background: var(--bg-panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 8px; font-size: 13px;
+}
 
 /* 풀이 화면 — 스펙 §5.1 배치 */
 .answering {

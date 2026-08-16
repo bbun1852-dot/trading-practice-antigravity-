@@ -16,6 +16,7 @@ beforeEach(() => {
   store.setState({
     phase: 'idle',
     notebookOpen: false,
+    config: { symbol: null, tf: null },
     view: null,
     question: null,
     draft: { direction: null, tags: new Set(), memo: '' },
@@ -129,6 +130,17 @@ describe('오답노트 축', () => {
     store.getState().closeNotebook()
     expect(store.getState().notebookOpen).toBe(false)
     expect(store.getState().phase).toBe('answering')
+  })
+})
+
+describe('출제 설정', () => {
+  it('기본값은 심볼·TF 모두 랜덤(null)이고, 어느 단계에서든 바꿀 수 있다', () => {
+    expect(store.getState().config).toEqual({ symbol: null, tf: null })
+    toAnswering()
+    store.getState().setConfig({ symbol: 'BTCUSDT' })
+    expect(store.getState().config).toEqual({ symbol: 'BTCUSDT', tf: null })
+    store.getState().setConfig({ tf: '1d' })
+    expect(store.getState().config).toEqual({ symbol: 'BTCUSDT', tf: '1d' })
   })
 })
 
