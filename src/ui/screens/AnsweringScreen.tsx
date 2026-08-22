@@ -22,8 +22,8 @@ export function AnsweringScreen() {
   const last = view.candles[view.candles.length - 1]
 
   return (
-    <main className="drill-screen">
-      <section className="main-chart">
+    <div className="answering">
+      <section className="chart-area">
         <div className="chart-caption" data-view-info style={{ display: 'flex', justifyContent: 'space-between' }}>
           <div>
             {view.timeframe} · {view.difficulty} · 봉 {view.candles.length}개 · 마지막 종가 {last.close}
@@ -112,6 +112,6 @@ export function AnsweringScreen() {
           제출
         </button>
       </footer>
-    </main>
+    </div>
   )
 }
