@@ -76,11 +76,11 @@ export function AnsweringScreen() {
             </button>
           </div>
         </div>
-        <CandleChart className="chart-canvas" candles={view.candles} />
+        <CandleChart className="chart-canvas" candles={view.candles} syncGroupId="drill" />
       </section>
       <aside className="side-area">
         {view.htfCandles.length > 0
-          ? <CandleChart className="htf" candles={view.htfCandles} compact />
+          ? <CandleChart className="htf" candles={view.htfCandles} compact syncGroupId="drill" />
           : <div className="placeholder htf">상위 TF 봉 없음</div>}
         <TagSheet timeframe={view.timeframe} />
       </aside>

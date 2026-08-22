@@ -43,14 +43,14 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
           ctx.stroke()
         } else if (p.type === 'fibonacci') {
           const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-          const diff = p.y2 - p.y1
           const startX = Math.min(p.x1, p.x2)
           const endX = Math.max(p.x1, p.x2)
           
           ctx.font = '12px sans-serif'
           
           levels.forEach(level => {
-            const y = p.y1 + diff * level
+            // p1 is 1 (100%), p2 is 0 (0%)
+            const y = p.y2 + (p.y1 - p.y2) * level
             ctx.beginPath()
             ctx.moveTo(startX, y)
             ctx.lineTo(endX, y)

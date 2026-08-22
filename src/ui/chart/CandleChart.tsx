@@ -34,15 +34,23 @@ const THEME = {
 export type CandleChartProps = {
   candles: readonly Candle[]
   className?: string
-  /** 미니 차트는 축·눈금을 줄인다 */
+  /** 공간이 좁을 때는 눈금·그리드를 숨긴다 */
   compact?: boolean
   /**
-   * 근거 오버레이. **복기 전용이다** — 풀이 화면에서 넘기면 답을 그려 주는 것이다
-   * (은닉 규율 U2, 스펙 §4).
+   * 보조 지표들. **이곳이 유일하다.** 왜냐하면 정답 화면(Review)에서는 사용자가 직접 도형을 그릴
+   * 수 없고(U2), 오답 노트(U4)에서도 마찬가지이기 때문이다.
    */
   overlays?: readonly OverlayShape[]
   colorFor?: ColorFor
+  syncGroupId?: string
 }
+
+type CrosshairMoveEvent = {
+  groupId: string;
+  sourceChart: IChartApi;
+  time: UTCTimestamp | null;
+}
+const crosshairListeners = new Set<(ev: CrosshairMoveEvent) => void>()
 
 const toBar = (c: Candle): CandlestickData<UTCTimestamp> => ({
   time: c.time as UTCTimestamp,
@@ -50,7 +58,7 @@ const toBar = (c: Candle): CandlestickData<UTCTimestamp> => ({
 })
 
 export function CandleChart({
-  candles, className, compact = false, overlays, colorFor = colorBySide,
+  candles, className, compact = false, overlays, colorFor = colorBySide, syncGroupId
 }: CandleChartProps) {
   const box = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
@@ -204,6 +212,52 @@ export function CandleChart({
     }
     drawn.current = { firstTime: candles[0].time, length: candles.length }
   }, [candles])
+
+  // Crosshair Synchronization
+  useEffect(() => {
+    if (!syncGroupId) return
+    
+    const moveHandler = (param: any) => {
+      if (param.sourceEvent) {
+        crosshairListeners.forEach(l => l({
+          groupId: syncGroupId,
+          sourceChart: chart.current!,
+          time: (param.time as UTCTimestamp | undefined) || null
+        }))
+      }
+    }
+    
+    const listener = (ev: CrosshairMoveEvent) => {
+      if (ev.groupId !== syncGroupId || ev.sourceChart === chart.current) return
+      const c = chart.current
+      const s = series.current
+      if (!c || !s) return
+      
+      if (ev.time) {
+        // Find the latest candle whose time is <= ev.time
+        let match: Candle | null = null
+        for (const cd of candles) {
+          if (cd.time <= ev.time) match = cd
+          else break
+        }
+        if (match) {
+          c.setCrosshairPosition(match.close, match.time as UTCTimestamp, s)
+        } else {
+          c.clearCrosshairPosition()
+        }
+      } else {
+        c.clearCrosshairPosition()
+      }
+    }
+    
+    chart.current?.subscribeCrosshairMove(moveHandler)
+    crosshairListeners.add(listener)
+    
+    return () => {
+      chart.current?.unsubscribeCrosshairMove(moveHandler)
+      crosshairListeners.delete(listener)
+    }
+  }, [syncGroupId, candles])
 
   return <div className={className} ref={box} />
 }
