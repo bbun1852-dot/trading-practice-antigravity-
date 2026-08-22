@@ -1,15 +1,24 @@
 import { useMemo } from 'react'
 import { useQuizStore } from '../store'
-import { PROFILE_OF, PROFILES } from '../../quiz/ruleCheck'
-import { TAG_BY_ID } from '../../quiz/taxonomy'
+import { TAGS, TAG_BY_ID } from '../../quiz/taxonomy'
 import { falseClaimPenalty } from '../../quiz/grader'
-import type { Timeframe } from '../../data/types'
+import type { SignalKind } from '../../analysis/signalTypes'
 
-export function TagSheet({ timeframe }: { timeframe: Timeframe }) {
+const KIND_LABEL: Record<SignalKind, string> = {
+  structure: '시장 구조 (Structure)',
+  smc: '스마트머니 (SMC)',
+  volume: '거래량 (Volume)',
+  pattern: '차트 패턴 (Pattern)',
+  candle: '캔들 패턴 (Candle)',
+  momentum: '모멘텀 (Momentum)',
+  ma: '이동평균 (MA)',
+  fib: '피보나치 (Fibonacci)',
+  volatility: '변동성 (Volatility)',
+}
+
+export function TagSheet() {
   const draft = useQuizStore((s) => s.draft)
   const toggleTag = useQuizStore((s) => s.toggleTag)
-
-  const profile = PROFILES[PROFILE_OF[timeframe]]
 
   const maxPenalty = useMemo(() => {
     let sum = 0
@@ -19,36 +28,32 @@ export function TagSheet({ timeframe }: { timeframe: Timeframe }) {
     return sum
   }, [draft.tags])
 
-  // Group unscored tags by kind
-  const unscoredByKind = useMemo(() => {
-    const groups: Record<string, string[]> = {}
-    profile.unscored.forEach((tagId) => {
-      const tag = TAG_BY_ID.get(tagId)
-      if (!tag) return
+  // Group all tags by kind
+  const tagsByKind = useMemo(() => {
+    const groups: Partial<Record<SignalKind, string[]>> = {}
+    TAGS.forEach((tag) => {
       if (!groups[tag.kind]) groups[tag.kind] = []
-      groups[tag.kind].push(tagId)
+      groups[tag.kind]!.push(tag.id)
     })
     return groups
-  }, [profile.unscored])
+  }, [])
 
   return (
     <div className="tag-sheet">
       <div className="sheet-header">
-        <strong>{profile.label}</strong>
+        <strong>근거 태그 (종합)</strong>
         <span className="penalty-info">
           선택 {draft.tags.size}개
-          {draft.tags.size > 0 && <span> · 전부 헛다리면 -{maxPenalty}점</span>}
+          {draft.tags.size > 0 && <span> · 오답시 최대 -{maxPenalty}점</span>}
         </span>
       </div>
 
       <div className="sheet-body">
-        {profile.rows.map((row) => (
-          <details key={row.key} className="sheet-row" open>
-            <summary>
-              {row.core && <span className="core-badge">[핵심]</span>} {row.label}
-            </summary>
+        {Object.entries(tagsByKind).map(([kind, tagIds]) => (
+          <details key={kind} className="sheet-row" open>
+            <summary>{KIND_LABEL[kind as SignalKind]}</summary>
             <div className="tag-list">
-              {row.tags.map((tagId) => {
+              {tagIds.map((tagId) => {
                 const tag = TAG_BY_ID.get(tagId)
                 if (!tag) return null
                 return (
@@ -65,35 +70,6 @@ export function TagSheet({ timeframe }: { timeframe: Timeframe }) {
             </div>
           </details>
         ))}
-
-        {profile.unscored.length > 0 && (
-          <details className="sheet-row unscored">
-            <summary>시트에 없는 근거 (보조 입력)</summary>
-            <div className="unscored-groups">
-              {Object.entries(unscoredByKind).map(([kind, tags]) => (
-                <div key={kind} className="tag-group">
-                  <div className="group-label">{kind}</div>
-                  <div className="tag-list">
-                    {tags.map((tagId) => {
-                      const tag = TAG_BY_ID.get(tagId)
-                      if (!tag) return null
-                      return (
-                        <label key={tagId} className="tag-item">
-                          <input
-                            type="checkbox"
-                            checked={draft.tags.has(tagId)}
-                            onChange={() => toggleTag(tagId)}
-                          />
-                          {tag.label}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
       </div>
     </div>
   )

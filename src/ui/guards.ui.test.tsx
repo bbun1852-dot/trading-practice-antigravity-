@@ -32,17 +32,22 @@ describe('UI Guards (U5 & R1-R3)', () => {
     })
   })
 
-  it('U5.1: Row order must exactly match PROFILES', () => {
+  it('U5.1: Row order must match SignalKind categories', () => {
     render(<AnsweringScreen />)
-    const profile = PROFILES[PROFILE_OF['1d']]
-    const expectedHeaders = profile.rows.map(r => r.label)
+    const expectedHeaders = [
+      '스마트머니 (SMC)',
+      '시장 구조 (Structure)',
+      '거래량 (Volume)',
+      '변동성 (Volatility)',
+      '차트 패턴 (Pattern)',
+      '피보나치 (Fibonacci)',
+      '캔들 패턴 (Candle)',
+      '이동평균 (MA)',
+      '모멘텀 (Momentum)'
+    ]
     const details = document.querySelectorAll('.sheet-row summary')
-    const actualHeaders = Array.from(details).map(el => {
-      let text = el.textContent || ''
-      text = text.replace('[핵심]', '').trim()
-      return text
-    })
-    expect(actualHeaders.slice(0, profile.rows.length)).toEqual(expectedHeaders)
+    const actualHeaders = Array.from(details).map(el => el.textContent?.trim() || '')
+    expect(actualHeaders).toEqual(expectedHeaders)
   })
 
   it('U5.2: No pre-checked tags', () => {
