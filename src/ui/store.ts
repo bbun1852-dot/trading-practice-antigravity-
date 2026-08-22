@@ -55,6 +55,8 @@ export type QuizStore = {
   // Drawing Tools State
   drawingTool: DrawingType | null
   drawings: UserDrawing[]
+  drawingsUndoStack: UserDrawing[][]
+  drawingsRedoStack: UserDrawing[][]
   previewDrawing: UserDrawing | null
 
   setConfig(c: Partial<Config>): void
@@ -70,6 +72,8 @@ export type QuizStore = {
   addDrawing(drawing: UserDrawing): void
   setPreviewDrawing(drawing: UserDrawing | null): void
   clearDrawings(): void
+  undoDrawing(): void
+  redoDrawing(): void
   
   submit(): void
   /** 재생 중 봉 하나 공개. 은닉 봉 수를 넘지 않는다(단조·상한) */
@@ -98,6 +102,8 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   // Drawing Tools State
   drawingTool: null,
   drawings: [],
+  drawingsUndoStack: [],
+  drawingsRedoStack: [],
   previewDrawing: null,
 
   setConfig(c) {
@@ -119,6 +125,8 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       report: null,
       replay: { revealed: 0, playing: false, speed: 1 },
       drawings: [],
+      drawingsUndoStack: [],
+      drawingsRedoStack: [],
       previewDrawing: null,
       drawingTool: null,
     })
@@ -155,7 +163,11 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   },
   
   addDrawing(drawing) {
-    set((s) => ({ drawings: [...s.drawings, drawing] }))
+    set((s) => ({ 
+      drawingsUndoStack: [...s.drawingsUndoStack, s.drawings],
+      drawingsRedoStack: [],
+      drawings: [...s.drawings, drawing] 
+    }))
   },
   
   setPreviewDrawing(drawing) {
@@ -163,7 +175,38 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   },
   
   clearDrawings() {
-    set({ drawings: [], previewDrawing: null })
+    set((s) => ({ 
+      drawingsUndoStack: [...s.drawingsUndoStack, s.drawings],
+      drawingsRedoStack: [],
+      drawings: [], 
+      previewDrawing: null 
+    }))
+  },
+
+  undoDrawing() {
+    set((s) => {
+      if (s.drawingsUndoStack.length === 0) return s
+      const prev = s.drawingsUndoStack[s.drawingsUndoStack.length - 1]
+      return {
+        drawingsUndoStack: s.drawingsUndoStack.slice(0, -1),
+        drawingsRedoStack: [...s.drawingsRedoStack, s.drawings],
+        drawings: prev,
+        previewDrawing: null
+      }
+    })
+  },
+
+  redoDrawing() {
+    set((s) => {
+      if (s.drawingsRedoStack.length === 0) return s
+      const next = s.drawingsRedoStack[s.drawingsRedoStack.length - 1]
+      return {
+        drawingsRedoStack: s.drawingsRedoStack.slice(0, -1),
+        drawingsUndoStack: [...s.drawingsUndoStack, s.drawings],
+        drawings: next,
+        previewDrawing: null
+      }
+    })
   },
 
   submit() {

@@ -146,9 +146,14 @@ export function CandleChart({
         isDrawing.current = false
         const finalPreview = useQuizStore.getState().previewDrawing
         if (finalPreview) {
-          addDrawing({ ...finalPreview, id: crypto.randomUUID() })
+          addDrawing({ 
+            ...finalPreview, 
+            id: crypto.randomUUID(),
+            p2: { bar: barIndex, price: finalPreview.type === 'ray' ? finalPreview.p1.price : price }
+          })
         }
         setPreviewDrawing(null)
+        useQuizStore.getState().setDrawingTool(null)
       }
     }
 
@@ -165,7 +170,7 @@ export function CandleChart({
       if (currentPreview) {
         setPreviewDrawing({
           ...currentPreview,
-          p2: { bar: barIndex, price }
+          p2: { bar: barIndex, price: currentPreview.type === 'ray' ? currentPreview.p1.price : price }
         })
       }
     }

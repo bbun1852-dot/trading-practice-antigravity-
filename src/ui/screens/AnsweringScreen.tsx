@@ -3,6 +3,7 @@
  *
  * **U1: 이 화면(과 하위 컴포넌트)은 store 의 `view` 만 읽는다. `question` 금지.**
  */
+import { useEffect } from 'react'
 import { CandleChart } from '../chart/CandleChart'
 import { useQuizStore } from '../store'
 import { TagSheet } from './TagSheet'
@@ -17,6 +18,25 @@ export function AnsweringScreen() {
   const drawingTool = useQuizStore((s) => s.drawingTool)
   const setDrawingTool = useQuizStore((s) => s.setDrawingTool)
   const clearDrawings = useQuizStore((s) => s.clearDrawings)
+  const undoDrawing = useQuizStore((s) => s.undoDrawing)
+  const redoDrawing = useQuizStore((s) => s.redoDrawing)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key.toLowerCase() === 'z') {
+          if (e.shiftKey) redoDrawing()
+          else undoDrawing()
+          e.preventDefault()
+        } else if (e.key.toLowerCase() === 'y') {
+          redoDrawing()
+          e.preventDefault()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undoDrawing, redoDrawing])
 
   if (!view) return null
   const last = view.candles[view.candles.length - 1]
