@@ -69,7 +69,7 @@ export type Answer = {
   entry?: number
   stopLoss?: number
   takeProfit?: number
-  /** 체크한 태그 id. 최대 15개 */
+  /** 체크한 태그 id */
   tags: string[]
   memo?: string
 }

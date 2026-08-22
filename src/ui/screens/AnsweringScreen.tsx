@@ -5,11 +5,13 @@
  */
 import { CandleChart } from '../chart/CandleChart'
 import { useQuizStore } from '../store'
+import { TagSheet } from './TagSheet'
 
 export function AnsweringScreen() {
   const view = useQuizStore((s) => s.view)
   const draft = useQuizStore((s) => s.draft)
   const setDirection = useQuizStore((s) => s.setDirection)
+  const setOrder = useQuizStore((s) => s.setOrder)
   const submit = useQuizStore((s) => s.submit)
 
   if (!view) return null
@@ -27,7 +29,7 @@ export function AnsweringScreen() {
         {view.htfCandles.length > 0
           ? <CandleChart className="htf" candles={view.htfCandles} compact />
           : <div className="placeholder htf">상위 TF 봉 없음</div>}
-        <div className="placeholder sheet">34점 시트 자리 (Task 6) · 선택 {draft.tags.size}개</div>
+        <TagSheet timeframe={view.timeframe} />
       </aside>
       <footer className="answer-bar">
         <div className="direction" role="radiogroup" aria-label="방향">
@@ -42,6 +44,35 @@ export function AnsweringScreen() {
               {d === 'long' ? '롱' : d === 'short' ? '숏' : '관망'}
             </label>
           ))}
+        </div>
+        <div className="order-inputs">
+          <label>
+            진입
+            <input
+              type="number"
+              value={draft.entry ?? ''}
+              onChange={(e) => setOrder({ entry: e.target.value ? Number(e.target.value) : undefined })}
+              disabled={draft.direction === 'flat' || draft.direction === null}
+            />
+          </label>
+          <label>
+            손절
+            <input
+              type="number"
+              value={draft.stopLoss ?? ''}
+              onChange={(e) => setOrder({ stopLoss: e.target.value ? Number(e.target.value) : undefined })}
+              disabled={draft.direction === 'flat' || draft.direction === null}
+            />
+          </label>
+          <label>
+            익절
+            <input
+              type="number"
+              value={draft.takeProfit ?? ''}
+              onChange={(e) => setOrder({ takeProfit: e.target.value ? Number(e.target.value) : undefined })}
+              disabled={draft.direction === 'flat' || draft.direction === null}
+            />
+          </label>
         </div>
         <span className="spacer" />
         <button className="primary" disabled={draft.direction === null} onClick={submit}>

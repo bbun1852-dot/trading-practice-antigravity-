@@ -1,4 +1,5 @@
 {
   "src/quiz/guards.test.ts": "5016fb5fc2f7552140ec3dc4958d6c20458fe3056226ed36a6a751fd1ff70dfc",
-  "scripts/verify.ts": "2d3654f7d75444c9d9c098b40d3aada542af37332ca3b69e5ccb396f39bfe692"
+  "scripts/verify.ts": "2d3654f7d75444c9d9c098b40d3aada542af37332ca3b69e5ccb396f39bfe692",
+  "src/ui/guards.ui.test.tsx": "a8672ba608e41bba26cefe268527eb01b63492cceb43ea95c030967026f8c382"
 }
