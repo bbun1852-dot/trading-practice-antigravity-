@@ -14,14 +14,47 @@ export function AnsweringScreen() {
   const setOrder = useQuizStore((s) => s.setOrder)
   const submit = useQuizStore((s) => s.submit)
 
+  const drawingTool = useQuizStore((s) => s.drawingTool)
+  const setDrawingTool = useQuizStore((s) => s.setDrawingTool)
+  const clearDrawings = useQuizStore((s) => s.clearDrawings)
+
   if (!view) return null
   const last = view.candles[view.candles.length - 1]
 
   return (
-    <div className="answering">
-      <section className="chart-area">
-        <div className="chart-caption" data-view-info>
-          {view.timeframe} · {view.difficulty} · 봉 {view.candles.length}개 · 마지막 종가 {last.close}
+    <main className="drill-screen">
+      <section className="main-chart">
+        <div className="chart-caption" data-view-info style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            {view.timeframe} · {view.difficulty} · 봉 {view.candles.length}개 · 마지막 종가 {last.close}
+          </div>
+          <div className="drawing-toolbar" style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className={drawingTool === null ? 'primary' : 'secondary'} 
+              onClick={() => setDrawingTool(null)}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>선택(이동)
+            </button>
+            <button 
+              className={drawingTool === 'trendline' ? 'primary' : 'secondary'} 
+              onClick={() => setDrawingTool('trendline')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>추세선
+            </button>
+            <button 
+              className={drawingTool === 'ray' ? 'primary' : 'secondary'} 
+              onClick={() => setDrawingTool('ray')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>레이
+            </button>
+            <button 
+              className={drawingTool === 'fibonacci' ? 'primary' : 'secondary'} 
+              onClick={() => setDrawingTool('fibonacci')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>피보나치
+            </button>
+            <button 
+              className="secondary" 
+              onClick={() => clearDrawings()}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>지우기
+            </button>
+          </div>
         </div>
         <CandleChart className="chart-canvas" candles={view.candles} />
       </section>
@@ -79,6 +112,6 @@ export function AnsweringScreen() {
           제출
         </button>
       </footer>
-    </div>
+    </main>
   )
 }

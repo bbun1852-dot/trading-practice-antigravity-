@@ -95,7 +95,7 @@ export function TagSheet({ timeframe }: { timeframe: Timeframe }) {
               이 패널은 상세 진입 기준을 점검하기 위해 설계되었습니다.
             </div>
             {profile.rows.map((row) => (
-              <details key={row.key} className="sheet-row" open>
+              <details key={row.key} className="sheet-row">
                 <summary>
                   {row.core && <span className="core-badge">[핵심]</span>} {row.label}
                 </summary>

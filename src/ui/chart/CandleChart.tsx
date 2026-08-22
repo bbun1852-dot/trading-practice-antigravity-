@@ -17,6 +17,9 @@ import {
 import type { Candle } from '../../data/types'
 import type { OverlayShape } from './overlay'
 import { OverlayPrimitive, colorBySide, type ColorFor } from './primitives/overlayPrimitive'
+import { DrawingPrimitive } from './primitives/DrawingPrimitive'
+import { useQuizStore } from '../store'
+import type { DrawingPoint, UserDrawing } from './drawingTypes'
 
 /** styles.css 의 다크 팔레트와 같은 값이어야 한다 — 차트만 다른 테마로 뜨면 안 된다 */
 const THEME = {
@@ -53,8 +56,16 @@ export function CandleChart({
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const overlay = useRef<OverlayPrimitive | null>(null)
-  /** 지금 차트에 들어 있는 봉의 (첫 시각, 개수). append 판정에 쓴다 */
+  const drawOverlay = useRef<DrawingPrimitive | null>(null)
+  const isDrawing = useRef(false)
+  /** 이미 차트에 들어 있는 캔들(중복 방지). append 최적화에 쓴다 */
   const drawn = useRef<{ firstTime: number; length: number } | null>(null)
+
+  const drawingTool = useQuizStore((s) => s.drawingTool)
+  const drawings = useQuizStore((s) => s.drawings)
+  const previewDrawing = useQuizStore((s) => s.previewDrawing)
+  const addDrawing = useQuizStore((s) => s.addDrawing)
+  const setPreviewDrawing = useQuizStore((s) => s.setPreviewDrawing)
 
   useEffect(() => {
     const c = createChart(box.current!, {
@@ -69,13 +80,19 @@ export function CandleChart({
       crosshair: { mode: 0 },
     })
     chart.current = c
+
     series.current = c.addSeries(CandlestickSeries, {
       upColor: THEME.up, downColor: THEME.down,
       wickUpColor: THEME.up, wickDownColor: THEME.down,
       borderVisible: false,
     })
+    
     overlay.current = new OverlayPrimitive()
     series.current.attachPrimitive(overlay.current)
+    
+    drawOverlay.current = new DrawingPrimitive()
+    series.current.attachPrimitive(drawOverlay.current)
+    
     drawn.current = null
 
     return () => {
@@ -83,6 +100,7 @@ export function CandleChart({
       chart.current = null
       series.current = null
       overlay.current = null
+      drawOverlay.current = null
       drawn.current = null
     }
   }, [compact])
@@ -90,6 +108,79 @@ export function CandleChart({
   useEffect(() => {
     overlay.current?.set(overlays ?? [], candles, colorFor)
   }, [overlays, candles, colorFor])
+
+  // Update DrawingPrimitive when drawings change
+  useEffect(() => {
+    const allDrawings = previewDrawing ? [...drawings, previewDrawing] : drawings
+    drawOverlay.current?.applyData(allDrawings, candles)
+  }, [drawings, previewDrawing, candles])
+
+  // Handle drawing events
+  useEffect(() => {
+    const c = chart.current
+    const s = series.current
+    if (!c || !s || !drawingTool) return
+
+    c.applyOptions({ handleScroll: false, handleScale: false })
+
+    const clickHandler = (param: any) => {
+      if (!param.point || !param.time || !param.seriesData.get(s)) return
+      
+      const price = s.coordinateToPrice(param.point.y)
+      if (price === null) return
+      
+      const barIndex = candles.findIndex(c => c.time === param.time)
+      if (barIndex === -1) return
+
+      if (!isDrawing.current) {
+        // First click
+        isDrawing.current = true
+        setPreviewDrawing({
+          id: 'preview',
+          type: drawingTool,
+          p1: { bar: barIndex, price },
+          p2: { bar: barIndex, price },
+        })
+      } else {
+        // Second click
+        isDrawing.current = false
+        const finalPreview = useQuizStore.getState().previewDrawing
+        if (finalPreview) {
+          addDrawing({ ...finalPreview, id: crypto.randomUUID() })
+        }
+        setPreviewDrawing(null)
+      }
+    }
+
+    const moveHandler = (param: any) => {
+      if (!isDrawing.current || !param.point || !param.time) return
+      
+      const price = s.coordinateToPrice(param.point.y)
+      if (price === null) return
+      
+      const barIndex = candles.findIndex(c => c.time === param.time)
+      if (barIndex === -1) return
+
+      const currentPreview = useQuizStore.getState().previewDrawing
+      if (currentPreview) {
+        setPreviewDrawing({
+          ...currentPreview,
+          p2: { bar: barIndex, price }
+        })
+      }
+    }
+
+    c.subscribeClick(clickHandler)
+    c.subscribeCrosshairMove(moveHandler)
+
+    return () => {
+      c.applyOptions({ handleScroll: true, handleScale: true })
+      c.unsubscribeClick(clickHandler)
+      c.unsubscribeCrosshairMove(moveHandler)
+      isDrawing.current = false
+      setPreviewDrawing(null)
+    }
+  }, [drawingTool, candles, addDrawing, setPreviewDrawing])
 
   useEffect(() => {
     const s = series.current

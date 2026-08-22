@@ -18,6 +18,7 @@ import { grade } from '../quiz/grader'
 import type { Direction, GradeReport, Question, SolverView } from '../quiz/types'
 import { IndexedDBNotebook } from '../data/notebook'
 import type { DrillTimeframe } from './pipeline'
+import type { DrawingType, UserDrawing } from './chart/drawingTypes'
 
 export type Phase = 'idle' | 'loading' | 'answering' | 'replaying' | 'review'
 
@@ -51,6 +52,11 @@ export type QuizStore = {
   report: GradeReport | null
   replay: { revealed: number; playing: boolean; speed: 1 | 4 }
 
+  // Drawing Tools State
+  drawingTool: DrawingType | null
+  drawings: UserDrawing[]
+  previewDrawing: UserDrawing | null
+
   setConfig(c: Partial<Config>): void
   start(): void
   questionReady(q: Question): void
@@ -58,6 +64,13 @@ export type QuizStore = {
   setOrder(o: { entry?: number; stopLoss?: number; takeProfit?: number }): void
   toggleTag(id: string): void
   setMemo(memo: string): void
+  
+  // Drawing Actions
+  setDrawingTool(tool: DrawingType | null): void
+  addDrawing(drawing: UserDrawing): void
+  setPreviewDrawing(drawing: UserDrawing | null): void
+  clearDrawings(): void
+  
   submit(): void
   /** 재생 중 봉 하나 공개. 은닉 봉 수를 넘지 않는다(단조·상한) */
   replayTick(): void
@@ -82,6 +95,11 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   report: null,
   replay: { revealed: 0, playing: false, speed: 1 },
 
+  // Drawing Tools State
+  drawingTool: null,
+  drawings: [],
+  previewDrawing: null,
+
   setConfig(c) {
     set((s) => ({ config: { ...s.config, ...c } }))
   },
@@ -100,6 +118,9 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       draft: emptyDraft(),
       report: null,
       replay: { revealed: 0, playing: false, speed: 1 },
+      drawings: [],
+      previewDrawing: null,
+      drawingTool: null,
     })
   },
 
@@ -126,6 +147,23 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   setMemo(memo) {
     if (get().phase !== 'answering') return
     set((s) => ({ draft: { ...s.draft, memo } }))
+  },
+
+  // Drawing Actions
+  setDrawingTool(tool) {
+    set({ drawingTool: tool, previewDrawing: null })
+  },
+  
+  addDrawing(drawing) {
+    set((s) => ({ drawings: [...s.drawings, drawing] }))
+  },
+  
+  setPreviewDrawing(drawing) {
+    set({ previewDrawing: drawing })
+  },
+  
+  clearDrawings() {
+    set({ drawings: [], previewDrawing: null })
   },
 
   submit() {
@@ -186,8 +224,10 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       }
       
       // Use imported IndexedDBNotebook
-      const notebook = new IndexedDBNotebook()
-      notebook.save(entry).catch(console.error)
+      if (typeof indexedDB !== 'undefined') {
+        const notebook = new IndexedDBNotebook()
+        notebook.save(entry).catch(console.error)
+      }
     }
 
     set({
