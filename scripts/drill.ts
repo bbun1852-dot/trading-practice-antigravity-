@@ -8,7 +8,8 @@ import { ruleCheck } from '../src/quiz/ruleCheck'
 import { toMarkdown } from '../src/quiz/report'
 import { TAG_BY_ID } from '../src/quiz/taxonomy'
 import type { Answer } from '../src/quiz/types'
-import { FileNotebook, type ReviewEntry } from '../src/data/notebook'
+import { type ReviewEntry } from '../src/data/notebook'
+import { FileNotebook } from '../src/data/notebook.node'
 
 const args = process.argv.slice(2)
 const isReview = args.includes('--review')

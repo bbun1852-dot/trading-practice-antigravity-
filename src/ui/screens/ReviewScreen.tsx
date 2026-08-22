@@ -1,45 +1,102 @@
-/**
- * 복기 화면 — 채점 리포트·34점 패널·오버레이 토글은 Task 7 이 채운다.
- * 지금은 **근거 오버레이만** 그린다 (Task 5 의 눈검증 대상).
- *
- * 은닉 규율 U2: 근거 계산은 answering 이 아니라 여기서만 한다. 이 화면은 답을
- * 이미 제출한 뒤에만 열리므로 `question` 을 읽어도 된다.
- */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { HIGHER_TF } from '../../data/types'
 import { activeSignalsAt } from '../../quiz/lifetime'
+import { ruleCheck } from '../../quiz/ruleCheck'
+import { TAG_BY_ID } from '../../quiz/taxonomy'
 import { CandleChart } from '../chart/CandleChart'
 import { toShapes } from '../chart/overlay'
 import { useQuizStore } from '../store'
 
 export function ReviewScreen() {
   const question = useQuizStore((s) => s.question)
-  const draft = useQuizStore((s) => s.draft)
+  const report = useQuizStore((s) => s.report)
   const next = useQuizStore((s) => s.next)
+  const draft = useQuizStore((s) => s.draft)
 
-  const shapes = useMemo(() => {
-    if (!question) return []
+  const [overlayFilter, setOverlayFilter] = useState<'all' | 'hits_misses' | 'none'>('hits_misses')
+
+  const { shapes, ruleResult } = useMemo(() => {
+    if (!question) return { shapes: [], ruleResult: null }
     const visible = question.candles.slice(0, question.decisionIndex + 1)
-    const active = activeSignalsAt(
+    const activeSigs = activeSignalsAt(
       visible, question.decisionIndex, question.timeframe,
       question.htfCandles, HIGHER_TF[question.timeframe],
     )
-    return toShapes(active, question.candles)
+    return {
+      shapes: toShapes(activeSigs, question.candles),
+      ruleResult: ruleCheck(activeSigs, question.timeframe)
+    }
   }, [question])
 
-  if (!question) return null
+  if (!question || !report || !ruleResult) return null
+
+  // Filter shapes based on UI toggle (R1/R2/R3 checks are implicit in what report has)
+  const visibleShapes = shapes.filter(s => {
+    if (overlayFilter === 'none') return false
+    if (overlayFilter === 'all') return true
+    // 'hits_misses' -> only hits and core misses
+    const isHit = report.evidence.verdict.hits.includes(s.id)
+    const isMiss = report.evidence.verdict.coreMisses.includes(s.id)
+    return isHit || isMiss
+  })
 
   return (
     <div className="review">
       <section className="chart-area">
         <div className="chart-caption">
-          복기 (Task 7 에서 채점 리포트가 붙는다) · 근거 {shapes.length}개 ·
-          제출 {draft.direction === 'long' ? '롱' : draft.direction === 'short' ? '숏' : '관망'} ·
-          체크 {draft.tags.size}개
+          <span>총점: {report.totalScore} / {report.applicableMax}</span>
+          {report.execution.max > 0 && (
+            <span> · 실행: {report.execution.score}/{report.execution.max}</span>
+          )}
+          <span> · 방향: {report.direction.score}/30</span>
+          <span> · 근거: {report.evidence.score}/30</span>
+          <span>
+            {' · '}
+            {report.replay === null ? '주문 불성립' : `결과: ${report.outcomeScore}점 (R·PnL: ${report.replay.r.toFixed(2)}R)`}
+          </span>
+          
+          <select value={overlayFilter} onChange={e => setOverlayFilter(e.target.value as any)}>
+            <option value="hits_misses">✅맞힘 + ⚠️핵심 놓침</option>
+            <option value="all">모든 근거 표시</option>
+            <option value="none">숨기기</option>
+          </select>
         </div>
-        <CandleChart className="chart-canvas" candles={question.candles} overlays={shapes} />
+        <CandleChart className="chart-canvas" candles={question.candles} overlays={visibleShapes} />
       </section>
+      
+      <aside className="side-area review-sidebar">
+        <div className="verdict-summary">
+          {report.evidence.verdict.hits.length > 0 && (
+            <div><strong>✅ 맞힘:</strong> {report.evidence.verdict.hits.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>
+          )}
+          {report.evidence.verdict.falseClaims.length > 0 && (
+            <div><strong>❌ 헛다리:</strong> {report.evidence.verdict.falseClaims.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>
+          )}
+          {report.evidence.verdict.coreMisses.length > 0 && (
+            <div><strong>⚠️ 핵심 놓침:</strong> {report.evidence.verdict.coreMisses.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>
+          )}
+          {report.evidence.verdict.reference.length > 0 && (
+            <div><strong>📋 참고:</strong> {report.evidence.verdict.reference.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>
+          )}
+        </div>
+
+        <div className="rule-panel">
+          <h3>34점 패널 (정답 기준)</h3>
+          {ruleResult.rows.map(r => (
+            <div key={r.key} className={`rule-row ${r.state}`}>
+              {r.core && <span>[핵심] </span>}{r.label}: {r.state} ({r.points}점)
+              {r.matched.length > 0 && <div className="matched-tags">{r.matched.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>}
+            </div>
+          ))}
+        </div>
+      </aside>
+
       <footer className="answer-bar">
+        <textarea 
+          placeholder="복기 메모 (선택)" 
+          value={draft.memo}
+          onChange={(e) => useQuizStore.getState().setMemo(e.target.value)}
+        />
         <span className="spacer" />
         <button className="primary" onClick={next}>다음 문제</button>
       </footer>

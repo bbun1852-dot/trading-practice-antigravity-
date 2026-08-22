@@ -14,7 +14,9 @@
  */
 import { create } from 'zustand'
 import { solverView } from '../quiz/generator'
+import { grade } from '../quiz/grader'
 import type { Direction, GradeReport, Question, SolverView } from '../quiz/types'
+import { IndexedDBNotebook } from '../data/notebook'
 import type { DrillTimeframe } from './pipeline'
 
 export type Phase = 'idle' | 'loading' | 'answering' | 'replaying' | 'review'
@@ -128,9 +130,21 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
 
   submit() {
     const s = get()
-    // 방향 없는 제출은 답안이 아니다 — 버튼도 막지만 머신도 막는다
-    if (s.phase !== 'answering' || s.draft.direction === null) return
-    set({ phase: 'replaying', replay: { revealed: 0, playing: true, speed: 1 } })
+    // 방향 미선택이거나 answering 단계가 아니면 무시
+    if (s.phase !== 'answering' || s.draft.direction === null || !s.question) return
+    
+    // 채점 (U2: answering 단계에서는 계산하지 않고, 제출 시점에만 계산)
+    const answer = {
+      direction: s.draft.direction,
+      entry: s.draft.entry,
+      stopLoss: s.draft.stopLoss,
+      takeProfit: s.draft.takeProfit,
+      tags: Array.from(s.draft.tags),
+      memo: s.draft.memo,
+    }
+    const report = grade(s.question, answer)
+
+    set({ phase: 'replaying', report, replay: { revealed: 0, playing: true, speed: 1 } })
   },
 
   replayTick() {
@@ -147,7 +161,35 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   },
 
   next() {
-    if (get().phase !== 'review') return
+    const s = get()
+    if (s.phase !== 'review') return
+
+    if (s.question && s.report && s.draft.direction) {
+      // 자동 저장 (ReviewEntry)
+      const entry = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        question: s.question,
+        answer: {
+          direction: s.draft.direction,
+          entry: s.draft.entry,
+          stopLoss: s.draft.stopLoss,
+          takeProfit: s.draft.takeProfit,
+          tags: Array.from(s.draft.tags),
+          memo: s.draft.memo,
+        },
+        report: s.report,
+        coreMisses: s.report.evidence.verdict.coreMisses,
+        falseClaims: s.report.evidence.verdict.falseClaims,
+        score: s.report.totalScore,
+        symbol: s.question.symbol,
+      }
+      
+      // Use imported IndexedDBNotebook
+      const notebook = new IndexedDBNotebook()
+      notebook.save(entry).catch(console.error)
+    }
+
     set({
       phase: 'loading',
       view: null,
