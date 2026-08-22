@@ -16,7 +16,7 @@ import { create } from 'zustand'
 import { solverView } from '../quiz/generator'
 import { grade } from '../quiz/grader'
 import type { Direction, GradeReport, Question, SolverView } from '../quiz/types'
-import { IndexedDBNotebook } from '../data/notebook'
+import { IndexedDBNotebook, type ReviewEntry } from '../data/notebook'
 import type { DrillTimeframe } from './pipeline'
 import type { DrawingType, UserDrawing } from './chart/drawingTypes'
 
@@ -82,6 +82,7 @@ export type QuizStore = {
   next(): void
   openNotebook(): void
   closeNotebook(): void
+  loadReview(entry: ReviewEntry): void
 }
 
 /** 은닉 봉 수 — replayTick 의 상한 */
@@ -289,5 +290,17 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
 
   closeNotebook() {
     set({ notebookOpen: false })
+  },
+
+  loadReview(entry) {
+    set({
+      phase: 'review',
+      question: entry.question,
+      view: solverView(entry.question),
+      draft: { ...entry.answer },
+      report: entry.report,
+      replay: { revealed: entry.question.candles.length, playing: false, speed: 1 },
+      notebookOpen: false,
+    })
   },
 }))
