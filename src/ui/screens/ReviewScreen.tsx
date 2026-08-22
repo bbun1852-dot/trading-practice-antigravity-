@@ -14,6 +14,7 @@ export function ReviewScreen() {
   const draft = useQuizStore((s) => s.draft)
 
   const [overlayFilter, setOverlayFilter] = useState<'all' | 'hits_misses' | 'none'>('hits_misses')
+  const [showRulePanel, setShowRulePanel] = useState(false)
 
   const { shapes, ruleResult } = useMemo(() => {
     if (!question) return { shapes: [], ruleResult: null }
@@ -80,15 +81,27 @@ export function ReviewScreen() {
           )}
         </div>
 
-        <div className="rule-panel">
-          <h3>34점 패널 (정답 기준)</h3>
-          {ruleResult.rows.map(r => (
-            <div key={r.key} className={`rule-row ${r.state}`}>
-              {r.core && <span>[핵심] </span>}{r.label}: {r.state} ({r.points}점)
-              {r.matched.length > 0 && <div className="matched-tags">{r.matched.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>}
-            </div>
-          ))}
+        <div style={{ marginTop: '20px' }}>
+          <button 
+            className="secondary" 
+            onClick={() => setShowRulePanel(!showRulePanel)}
+            style={{ width: '100%' }}
+          >
+            {showRulePanel ? '34점 룰 분석 숨기기' : '34점 룰 분석 (My Setup) 보기'}
+          </button>
         </div>
+
+        {showRulePanel && (
+          <div className="rule-panel" style={{ marginTop: '16px' }}>
+            <h3>34점 패널 (정답 기준)</h3>
+            {ruleResult.rows.map(r => (
+              <div key={r.key} className={`rule-row ${r.state}`}>
+                {r.core && <span>[핵심] </span>}{r.label}: {r.state} ({r.points}점)
+                {r.matched.length > 0 && <div className="matched-tags">{r.matched.map(id => TAG_BY_ID.get(id)?.label).join(', ')}</div>}
+              </div>
+            ))}
+          </div>
+        )}
       </aside>
 
       <footer className="answer-bar">
