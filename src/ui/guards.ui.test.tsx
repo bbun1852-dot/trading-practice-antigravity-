@@ -37,13 +37,7 @@ describe('UI Guards (U5 & R1-R3)', () => {
     const expectedHeaders = [
       '스마트머니 (SMC)',
       '시장 구조 (Structure)',
-      '거래량 (Volume)',
-      '변동성 (Volatility)',
-      '차트 패턴 (Pattern)',
-      '피보나치 (Fibonacci)',
-      '캔들 패턴 (Candle)',
-      '이동평균 (MA)',
-      '모멘텀 (Momentum)'
+      '거래량 (Volume)'
     ]
     const details = document.querySelectorAll('.sheet-row summary')
     const actualHeaders = Array.from(details).map(el => el.textContent?.trim() || '')

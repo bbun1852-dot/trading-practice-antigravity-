@@ -29,7 +29,7 @@ export function AnsweringScreen() {
         {view.htfCandles.length > 0
           ? <CandleChart className="htf" candles={view.htfCandles} compact />
           : <div className="placeholder htf">상위 TF 봉 없음</div>}
-        <TagSheet />
+        <TagSheet timeframe={view.timeframe} />
       </aside>
       <footer className="answer-bar">
         <div className="direction" role="radiogroup" aria-label="방향">
