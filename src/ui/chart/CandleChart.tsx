@@ -132,7 +132,7 @@ export function CandleChart({
     c.applyOptions({ handleScroll: false, handleScale: false })
 
     const clickHandler = (param: MouseEventParams) => {
-      if (!param.point || !param.time || !param.seriesData.get(s)) return
+      if (!param.point || !param.time) return
       
       const price = s.coordinateToPrice(param.point.y)
       if (price === null) return
@@ -166,7 +166,7 @@ export function CandleChart({
     }
 
     const mouseMoveHandler = (param: MouseEventParams) => {
-      if (!isDrawing.current || !param.point || !param.time || !param.seriesData.get(s)) return
+      if (!isDrawing.current || !param.point || !param.time) return
       
       const price = s.coordinateToPrice(param.point.y)
       if (price === null) return

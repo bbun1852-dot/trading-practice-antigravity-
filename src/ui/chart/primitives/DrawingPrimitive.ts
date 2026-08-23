@@ -48,8 +48,7 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
           ctx.font = '12px sans-serif'
           
           levels.forEach(level => {
-            // p1 is 1 (100%), p2 is 0 (0%)
-            const y = p.y2 + (p.y1 - p.y2) * level
+            const y = p.y1 + (p.y2 - p.y1) * level
             ctx.beginPath()
             ctx.moveTo(startX, y)
             ctx.lineTo(endX, y)
@@ -61,7 +60,8 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
             ctx.stroke()
             
             ctx.fillStyle = ctx.strokeStyle
-            ctx.fillText(level.toString(), endX + 4, y + 4)
+            const label = (1 - level).toString()
+            ctx.fillText(label.length > 5 ? label.substring(0, 5) : label, endX + 4, y + 4)
           })
           
           ctx.beginPath()
