@@ -11,11 +11,12 @@
  */
 import { useEffect, useRef } from 'react'
 import {
-  CandlestickSeries, createChart,
+  CandlestickSeries, LineSeries, HistogramSeries, createChart,
   type CandlestickData, type IChartApi, type ISeriesApi, type UTCTimestamp,
   type MouseEventParams,
 } from 'lightweight-charts'
 import type { Candle } from '../../data/types'
+import { rsi, macd, bollinger } from '../../analysis/indicators'
 import type { OverlayShape } from './overlay'
 import { OverlayPrimitive, colorBySide, type ColorFor } from './primitives/overlayPrimitive'
 import { DrawingPrimitive } from './primitives/DrawingPrimitive'
@@ -68,6 +69,7 @@ export function CandleChart({
   const isDrawing = useRef(false)
   /** 이미 차트에 들어 있는 캔들(중복 방지). append 최적화에 쓴다 */
   const drawn = useRef<{ firstTime: number; length: number } | null>(null)
+  const indRefs = useRef<any>({})
 
   const drawingTool = useQuizStore((s) => s.drawingTool)
   const drawings = useQuizStore((s) => s.drawings)
@@ -83,7 +85,7 @@ export function CandleChart({
         vertLines: { color: THEME.grid, visible: !compact },
         horzLines: { color: THEME.grid, visible: !compact },
       },
-      rightPriceScale: { borderColor: THEME.border, visible: !compact },
+      rightPriceScale: { borderColor: THEME.border, visible: !compact, scaleMargins: { top: 0.1, bottom: 0.25 } },
       timeScale: { borderColor: THEME.border, timeVisible: true, rightOffset: 4 },
       crosshair: { mode: 0 },
     })
@@ -100,6 +102,20 @@ export function CandleChart({
     
     drawOverlay.current = new DrawingPrimitive()
     series.current.attachPrimitive(drawOverlay.current)
+    
+    indRefs.current.bbUpper = c.addSeries(LineSeries, { color: 'rgba(255, 255, 255, 0.3)', lineWidth: 1, crosshairMarkerVisible: false })
+    indRefs.current.bbLower = c.addSeries(LineSeries, { color: 'rgba(255, 255, 255, 0.3)', lineWidth: 1, crosshairMarkerVisible: false })
+    indRefs.current.bbMid = c.addSeries(LineSeries, { color: 'rgba(255, 152, 0, 0.5)', lineWidth: 1, crosshairMarkerVisible: false })
+
+    if (!compact) {
+      indRefs.current.rsi = c.addSeries(LineSeries, { color: '#ce93d8', lineWidth: 1, priceScaleId: 'rsi', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } })
+      indRefs.current.macdLine = c.addSeries(LineSeries, { color: '#2962FF', lineWidth: 1, priceScaleId: 'macd', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } })
+      indRefs.current.macdSignal = c.addSeries(LineSeries, { color: '#FF6D00', lineWidth: 1, priceScaleId: 'macd', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } })
+      indRefs.current.macdHist = c.addSeries(HistogramSeries, { priceScaleId: 'macd', priceFormat: { type: 'price', precision: 2, minMove: 0.01 } })
+
+      c.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.75, bottom: 0.15 }, borderColor: THEME.border })
+      c.priceScale('macd').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 }, borderColor: THEME.border })
+    }
     
     drawn.current = null
 
@@ -208,6 +224,35 @@ export function CandleChart({
       for (let i = prev.length; i < candles.length; i++) s.update(toBar(candles[i]))
     } else {
       s.setData(candles.map(toBar))
+    }
+    
+    // Compute and apply indicators
+    const cl = candles.map(c => c.close)
+    const bb = bollinger(cl)
+    const bbUp = bb.upper.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    const bbDn = bb.lower.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    const bbMd = bb.mid.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    
+    indRefs.current.bbUpper?.setData(bbUp)
+    indRefs.current.bbLower?.setData(bbDn)
+    indRefs.current.bbMid?.setData(bbMd)
+
+    if (!compact) {
+      const r = rsi(cl)
+      const rsiData = r.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      
+      const m = macd(cl)
+      const macdL = m.macd.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      const macdS = m.signal.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      const macdH = m.hist.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v, color: v >= 0 ? THEME.up : THEME.down })).filter(d => !Number.isNaN(d.value))
+      
+      indRefs.current.rsi?.setData(rsiData)
+      indRefs.current.macdLine?.setData(macdL)
+      indRefs.current.macdSignal?.setData(macdS)
+      indRefs.current.macdHist?.setData(macdH)
+    }
+
+    if (!sameSeries) {
       chart.current?.timeScale().fitContent()
     }
     drawn.current = { firstTime: candles[0].time, length: candles.length }
