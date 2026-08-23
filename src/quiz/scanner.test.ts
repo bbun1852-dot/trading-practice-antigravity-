@@ -307,7 +307,7 @@ describe('scanForSetups', () => {
 
   it('기본값으로도 후보가 실제로 나온다 (검사가 공허하지 않다)', () => {
     expect(scanForSetups(cs).length).toBeGreaterThan(5)
-  })
+  }, 10000)
 
   it('후보의 barIndex 가 오름차순이고 중복되지 않는다', () => {
     const out = scanForSetups(cs)

@@ -6,8 +6,6 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { AnsweringScreen } from './screens/AnsweringScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
 import { useQuizStore } from './store'
-import { PROFILES, PROFILE_OF } from '../quiz/ruleCheck'
-
 vi.mock('./chart/CandleChart', () => ({
   CandleChart: () => <div data-testid="candle-chart-mock" />
 }))

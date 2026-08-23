@@ -2,8 +2,7 @@ import type {
   IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesPrimitive,
   SeriesAttachedParameter, Time,
 } from 'lightweight-charts'
-import type { Candle } from '../../../data/types'
-import type { UserDrawing, DrawingPoint } from '../drawingTypes'
+import type { UserDrawing } from '../drawingTypes'
 
 type PlacedDrawing = 
   | { type: 'trendline', x1: number, y1: number, x2: number, y2: number }
@@ -81,16 +80,12 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
 class DrawingPaneView implements IPrimitivePaneView {
   private placed: PlacedDrawing[] = []
 
-  update(drawings: readonly UserDrawing[], candles: readonly Candle[], param: SeriesAttachedParameter<Time>) {
+  update(drawings: readonly UserDrawing[], param: SeriesAttachedParameter<Time>) {
     this.placed = []
     
     for (const d of drawings) {
-      const p1Time = candles[d.p1.bar]?.time as Time
-      const p2Time = candles[d.p2.bar]?.time as Time
-      if (!p1Time || !p2Time) continue
-
-      const x1 = param.chart.timeScale().timeToCoordinate(p1Time)
-      const x2 = param.chart.timeScale().timeToCoordinate(p2Time)
+      const x1 = param.chart.timeScale().timeToCoordinate((d.p1.time / 1000) as Time)
+      const x2 = param.chart.timeScale().timeToCoordinate((d.p2.time / 1000) as Time)
       const y1 = param.series.priceToCoordinate(d.p1.price)
       const y2 = param.series.priceToCoordinate(d.p2.price)
 
@@ -110,7 +105,6 @@ export class DrawingPrimitive implements ISeriesPrimitive<Time> {
   private readonly _paneView = new DrawingPaneView()
 
   private _drawings: readonly UserDrawing[] = []
-  private _candles: readonly Candle[] = []
 
   attached(param: SeriesAttachedParameter<Time>): void {
     this._param = param
@@ -124,12 +118,11 @@ export class DrawingPrimitive implements ISeriesPrimitive<Time> {
   }
   updateAllViews(): void {
     if (!this._param) return
-    this._paneView.update(this._drawings, this._candles, this._param)
+    this._paneView.update(this._drawings, this._param)
   }
 
-  applyData(drawings: readonly UserDrawing[], candles: readonly Candle[]) {
+  applyData(drawings: readonly UserDrawing[]) {
     this._drawings = drawings
-    this._candles = candles
     this._param?.requestUpdate()
   }
 }

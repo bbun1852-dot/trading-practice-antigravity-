@@ -10,6 +10,7 @@ import { TAG_BY_ID } from '../src/quiz/taxonomy'
 import type { Answer } from '../src/quiz/types'
 import { type ReviewEntry } from '../src/data/notebook'
 import { FileNotebook } from '../src/data/notebook.node'
+import { computeReviewStats } from '../src/quiz/reviewStats'
 
 const args = process.argv.slice(2)
 const isReview = args.includes('--review')
@@ -19,36 +20,22 @@ if (isReview) {
   const nb = new FileNotebook()
   const entries = await nb.listAll()
   
-  const coreFreq: Record<string, number> = {}
-  const falseFreq: Record<string, number> = {}
+  const stats = computeReviewStats(entries)
   
-  for (const e of entries) {
-    for (const tag of e.coreMisses ?? []) coreFreq[tag] = (coreFreq[tag] ?? 0) + 1
-    for (const tag of e.falseClaims ?? []) falseFreq[tag] = (falseFreq[tag] ?? 0) + 1
-  }
-  
-  const sortFreq = (freq: Record<string, number>) => {
-    return Object.entries(freq)
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 5)
-  }
-  
-  const topCore = sortFreq(coreFreq)
-  const topFalse = sortFreq(falseFreq)
-  
-  console.log('=== 오답 노트 통계 ===')
-  console.log('자주 놓친 핵심 근거 (Core Misses):')
-  if (topCore.length === 0) console.log('  없음')
-  topCore.forEach(([tag, count], i) => {
-    const note = count < 3 ? ' (표본 부족: 3건 미만)' : ''
-    console.log(`  ${i + 1}. ${tag} (${count}회)${note}`)
+  console.log('=== 오답노트 통계 ===')
+  console.log(`총 풀이: ${stats.totalCount}건, 평균 점수: ${stats.averageScore.toFixed(1)}점`)
+  console.log('가장 많이 놓친 근거 (Core Misses):')
+  if (stats.topCoreMisses.length === 0) console.log('  없음')
+  stats.topCoreMisses.forEach(({ tagId, count }, i) => {
+    const note = count < 3 ? ' (숙달 부족: 3회 이상)' : ''
+    console.log(`  ${i + 1}. ${tagId} (${count}회)${note}`)
   })
   
-  console.log('자주 착각한 근거 (False Claims):')
-  if (topFalse.length === 0) console.log('  없음')
-  topFalse.forEach(([tag, count], i) => {
-    const note = count < 3 ? ' (표본 부족: 3건 미만)' : ''
-    console.log(`  ${i + 1}. ${tag} (${count}회)${note}`)
+  console.log('가장 많이 착각한 근거 (False Claims):')
+  if (stats.topFalseClaims.length === 0) console.log('  없음')
+  stats.topFalseClaims.forEach(({ tagId, count }, i) => {
+    const note = count < 3 ? ' (숙달 부족: 3회 이상)' : ''
+    console.log(`  ${i + 1}. ${tagId} (${count}회)${note}`)
   })
   
   process.exit(0)

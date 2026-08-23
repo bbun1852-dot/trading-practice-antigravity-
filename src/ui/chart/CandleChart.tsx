@@ -13,13 +13,13 @@ import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries, createChart,
   type CandlestickData, type IChartApi, type ISeriesApi, type UTCTimestamp,
+  type MouseEventParams,
 } from 'lightweight-charts'
 import type { Candle } from '../../data/types'
 import type { OverlayShape } from './overlay'
 import { OverlayPrimitive, colorBySide, type ColorFor } from './primitives/overlayPrimitive'
 import { DrawingPrimitive } from './primitives/DrawingPrimitive'
 import { useQuizStore } from '../store'
-import type { DrawingPoint, UserDrawing } from './drawingTypes'
 
 /** styles.css 의 다크 팔레트와 같은 값이어야 한다 — 차트만 다른 테마로 뜨면 안 된다 */
 const THEME = {
@@ -120,7 +120,7 @@ export function CandleChart({
   // Update DrawingPrimitive when drawings change
   useEffect(() => {
     const allDrawings = previewDrawing ? [...drawings, previewDrawing] : drawings
-    drawOverlay.current?.applyData(allDrawings, candles)
+    drawOverlay.current?.applyData(allDrawings)
   }, [drawings, previewDrawing, candles])
 
   // Handle drawing events
@@ -131,14 +131,14 @@ export function CandleChart({
 
     c.applyOptions({ handleScroll: false, handleScale: false })
 
-    const clickHandler = (param: any) => {
+    const clickHandler = (param: MouseEventParams) => {
       if (!param.point || !param.time || !param.seriesData.get(s)) return
       
       const price = s.coordinateToPrice(param.point.y)
       if (price === null) return
       
-      const barIndex = candles.findIndex(c => c.time === param.time)
-      if (barIndex === -1) return
+      const time = param.time as number
+      if (!time) return
 
       if (!isDrawing.current) {
         // First click
@@ -146,8 +146,8 @@ export function CandleChart({
         setPreviewDrawing({
           id: 'preview',
           type: drawingTool,
-          p1: { bar: barIndex, price },
-          p2: { bar: barIndex, price },
+          p1: { time, price },
+          p2: { time, price },
         })
       } else {
         // Second click
@@ -157,7 +157,7 @@ export function CandleChart({
           addDrawing({ 
             ...finalPreview, 
             id: crypto.randomUUID(),
-            p2: { bar: barIndex, price: finalPreview.type === 'ray' ? finalPreview.p1.price : price }
+            p2: { time, price: finalPreview.type === 'ray' ? finalPreview.p1.price : price }
           })
         }
         setPreviewDrawing(null)
@@ -165,31 +165,31 @@ export function CandleChart({
       }
     }
 
-    const moveHandler = (param: any) => {
-      if (!isDrawing.current || !param.point || !param.time) return
+    const mouseMoveHandler = (param: MouseEventParams) => {
+      if (!isDrawing.current || !param.point || !param.time || !param.seriesData.get(s)) return
       
       const price = s.coordinateToPrice(param.point.y)
       if (price === null) return
       
-      const barIndex = candles.findIndex(c => c.time === param.time)
-      if (barIndex === -1) return
+      const time = param.time as number
+      if (!time) return
 
       const currentPreview = useQuizStore.getState().previewDrawing
       if (currentPreview) {
         setPreviewDrawing({
           ...currentPreview,
-          p2: { bar: barIndex, price: currentPreview.type === 'ray' ? currentPreview.p1.price : price }
+          p2: { time, price: currentPreview.type === 'ray' ? currentPreview.p1.price : price }
         })
       }
     }
 
     c.subscribeClick(clickHandler)
-    c.subscribeCrosshairMove(moveHandler)
+    c.subscribeCrosshairMove(mouseMoveHandler)
 
     return () => {
       c.applyOptions({ handleScroll: true, handleScale: true })
       c.unsubscribeClick(clickHandler)
-      c.unsubscribeCrosshairMove(moveHandler)
+      c.unsubscribeCrosshairMove(mouseMoveHandler)
       isDrawing.current = false
       setPreviewDrawing(null)
     }

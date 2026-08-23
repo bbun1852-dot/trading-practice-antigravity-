@@ -297,9 +297,9 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       phase: 'review',
       question: entry.question,
       view: solverView(entry.question),
-      draft: { ...entry.answer },
+      draft: { ...entry.answer, tags: new Set(entry.answer.tags), memo: entry.answer.memo ?? '' },
       report: entry.report,
-      replay: { revealed: entry.question.candles.length, playing: false, speed: 1 },
+      replay: { playing: false, speed: 1, revealed: hiddenCount(entry.question) },
       notebookOpen: false,
     })
   },
