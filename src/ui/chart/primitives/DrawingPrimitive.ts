@@ -84,8 +84,8 @@ class DrawingPaneView implements IPrimitivePaneView {
     this.placed = []
     
     for (const d of drawings) {
-      const x1 = param.chart.timeScale().timeToCoordinate((d.p1.time / 1000) as Time)
-      const x2 = param.chart.timeScale().timeToCoordinate((d.p2.time / 1000) as Time)
+      const x1 = param.chart.timeScale().timeToCoordinate(d.p1.time as Time)
+      const x2 = param.chart.timeScale().timeToCoordinate(d.p2.time as Time)
       const y1 = param.series.priceToCoordinate(d.p1.price)
       const y2 = param.series.priceToCoordinate(d.p2.price)
 

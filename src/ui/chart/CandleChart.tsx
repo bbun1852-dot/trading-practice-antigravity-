@@ -61,6 +61,7 @@ const toBar = (c: Candle): CandlestickData<UTCTimestamp> => ({
 export function CandleChart({
   candles, className, compact = false, overlays, colorFor = colorBySide, syncGroupId
 }: CandleChartProps) {
+  const indicators = useQuizStore((s) => s.indicators)
   const box = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -70,6 +71,7 @@ export function CandleChart({
   /** 이미 차트에 들어 있는 캔들(중복 방지). append 최적화에 쓴다 */
   const drawn = useRef<{ firstTime: number; length: number } | null>(null)
   const indRefs = useRef<any>({})
+  const legendRef = useRef<HTMLDivElement>(null)
 
   const drawingTool = useQuizStore((s) => s.drawingTool)
   const drawings = useQuizStore((s) => s.drawings)
@@ -128,6 +130,19 @@ export function CandleChart({
       drawn.current = null
     }
   }, [compact])
+
+  useEffect(() => {
+    if (!indRefs.current) return
+    indRefs.current.bbUpper?.applyOptions({ visible: indicators.bb })
+    indRefs.current.bbLower?.applyOptions({ visible: indicators.bb })
+    indRefs.current.bbMid?.applyOptions({ visible: indicators.bb })
+    if (!compact) {
+      indRefs.current.rsi?.applyOptions({ visible: indicators.rsi })
+      indRefs.current.macdLine?.applyOptions({ visible: indicators.macd })
+      indRefs.current.macdSignal?.applyOptions({ visible: indicators.macd })
+      indRefs.current.macdHist?.applyOptions({ visible: indicators.macd })
+    }
+  }, [indicators, compact])
 
   useEffect(() => {
     overlay.current?.set(overlays ?? [], candles, colorFor)
@@ -229,9 +244,9 @@ export function CandleChart({
     // Compute and apply indicators
     const cl = candles.map(c => c.close)
     const bb = bollinger(cl)
-    const bbUp = bb.upper.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
-    const bbDn = bb.lower.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
-    const bbMd = bb.mid.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    const bbUp = bb.upper.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    const bbDn = bb.lower.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+    const bbMd = bb.mid.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
     
     indRefs.current.bbUpper?.setData(bbUp)
     indRefs.current.bbLower?.setData(bbDn)
@@ -239,12 +254,12 @@ export function CandleChart({
 
     if (!compact) {
       const r = rsi(cl)
-      const rsiData = r.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      const rsiData = r.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
       
       const m = macd(cl)
-      const macdL = m.macd.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
-      const macdS = m.signal.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
-      const macdH = m.hist.map((v, i) => ({ time: (candles[i].time / 1000) as UTCTimestamp, value: v, color: v >= 0 ? THEME.up : THEME.down })).filter(d => !Number.isNaN(d.value))
+      const macdL = m.macd.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      const macdS = m.signal.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v })).filter(d => !Number.isNaN(d.value))
+      const macdH = m.hist.map((v, i) => ({ time: candles[i].time as UTCTimestamp, value: v, color: v >= 0 ? THEME.up : THEME.down })).filter(d => !Number.isNaN(d.value))
       
       indRefs.current.rsi?.setData(rsiData)
       indRefs.current.macdLine?.setData(macdL)
@@ -257,6 +272,42 @@ export function CandleChart({
     }
     drawn.current = { firstTime: candles[0].time, length: candles.length }
   }, [candles])
+
+  // Legend Update
+  useEffect(() => {
+    if (compact || !chart.current) return
+    const c = chart.current
+    const handler = (param: MouseEventParams) => {
+      if (!legendRef.current) return
+      if (!param.time || param.point === undefined || !param.seriesData) {
+        legendRef.current.innerHTML = ''
+        return
+      }
+      
+      let html = ''
+      const bbUp = indRefs.current.bbUpper ? param.seriesData.get(indRefs.current.bbUpper) as any : null
+      const bbDn = indRefs.current.bbLower ? param.seriesData.get(indRefs.current.bbLower) as any : null
+      const bbMd = indRefs.current.bbMid ? param.seriesData.get(indRefs.current.bbMid) as any : null
+      const rsiData = indRefs.current.rsi ? param.seriesData.get(indRefs.current.rsi) as any : null
+      const macdLine = indRefs.current.macdLine ? param.seriesData.get(indRefs.current.macdLine) as any : null
+      const macdHist = indRefs.current.macdHist ? param.seriesData.get(indRefs.current.macdHist) as any : null
+      
+      if (bbUp && bbUp.value !== undefined && indicators.bb) {
+        html += `<span style="color: rgba(255,255,255,0.7); margin-right: 8px;">BB: ${bbUp.value.toFixed(2)} | ${bbMd.value.toFixed(2)} | ${bbDn.value.toFixed(2)}</span>`
+      }
+      if (rsiData && rsiData.value !== undefined && indicators.rsi) {
+        html += `<span style="color: #ce93d8; margin-right: 8px;">RSI: ${rsiData.value.toFixed(2)}</span>`
+      }
+      if (macdLine && macdLine.value !== undefined && macdHist && macdHist.value !== undefined && indicators.macd) {
+        html += `<span style="color: #2962FF; margin-right: 8px;">MACD: ${macdLine.value.toFixed(2)}</span>`
+        html += `<span style="color: ${macdHist.value >= 0 ? THEME.up : THEME.down}; margin-right: 8px;">Hist: ${macdHist.value.toFixed(2)}</span>`
+      }
+      
+      legendRef.current.innerHTML = html
+    }
+    c.subscribeCrosshairMove(handler)
+    return () => c.unsubscribeCrosshairMove(handler)
+  }, [compact, indicators])
 
   // Crosshair Synchronization
   useEffect(() => {
@@ -304,5 +355,26 @@ export function CandleChart({
     }
   }, [syncGroupId, candles])
 
-  return <div className={className} ref={box} />
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }} className={className}>
+      <div ref={box} style={{ width: '100%', height: '100%' }} />
+      {!compact && (
+        <div 
+          ref={legendRef} 
+          style={{ 
+            position: 'absolute', 
+            top: '8px', 
+            left: '8px', 
+            zIndex: 10, 
+            fontFamily: 'monospace', 
+            fontSize: '12px',
+            pointerEvents: 'none',
+            background: 'rgba(0,0,0,0.5)',
+            padding: '2px 4px',
+            borderRadius: '4px'
+          }} 
+        />
+      )}
+    </div>
+  )
 }

@@ -58,6 +58,9 @@ export type QuizStore = {
   drawingsUndoStack: UserDrawing[][]
   drawingsRedoStack: UserDrawing[][]
   previewDrawing: UserDrawing | null
+  
+  indicators: { bb: boolean; rsi: boolean; macd: boolean }
+  toggleIndicator: (id: 'bb' | 'rsi' | 'macd') => void
 
   setConfig(c: Partial<Config>): void
   start(): void
@@ -106,6 +109,7 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   drawingsUndoStack: [],
   drawingsRedoStack: [],
   previewDrawing: null,
+  indicators: { bb: false, rsi: false, macd: false },
 
   setConfig(c) {
     set((s) => ({ config: { ...s.config, ...c } }))
@@ -130,6 +134,7 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       drawingsRedoStack: [],
       previewDrawing: null,
       drawingTool: null,
+      indicators: { bb: false, rsi: false, macd: false },
     })
   },
 
@@ -141,6 +146,12 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
   setOrder(o) {
     if (get().phase !== 'answering') return
     set((s) => ({ draft: { ...s.draft, ...o } }))
+  },
+
+  toggleIndicator(id) {
+    set((s) => ({
+      indicators: { ...s.indicators, [id]: !s.indicators[id] }
+    }))
   },
 
   toggleTag(id) {

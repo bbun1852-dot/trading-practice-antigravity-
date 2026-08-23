@@ -20,6 +20,9 @@ export function AnsweringScreen() {
   const clearDrawings = useQuizStore((s) => s.clearDrawings)
   const undoDrawing = useQuizStore((s) => s.undoDrawing)
   const redoDrawing = useQuizStore((s) => s.redoDrawing)
+  
+  const indicators = useQuizStore((s) => s.indicators)
+  const toggleIndicator = useQuizStore((s) => s.toggleIndicator)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -73,6 +76,23 @@ export function AnsweringScreen() {
               className="secondary" 
               onClick={() => clearDrawings()}
               style={{ padding: '2px 8px', fontSize: '12px' }}>지우기
+            </button>
+          </div>
+          <div className="indicator-toolbar" style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+            <button 
+              className={indicators.bb ? 'primary' : 'secondary'} 
+              onClick={() => toggleIndicator('bb')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>BB
+            </button>
+            <button 
+              className={indicators.rsi ? 'primary' : 'secondary'} 
+              onClick={() => toggleIndicator('rsi')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>RSI
+            </button>
+            <button 
+              className={indicators.macd ? 'primary' : 'secondary'} 
+              onClick={() => toggleIndicator('macd')}
+              style={{ padding: '2px 8px', fontSize: '12px' }}>MACD
             </button>
           </div>
         </div>
