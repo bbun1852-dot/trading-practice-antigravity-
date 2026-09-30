@@ -6,15 +6,19 @@ import { useQuizStore } from '../store'
  * 시작 화면 — 심볼·TF 를 고르거나 랜덤에 맡긴다 (스펙 §3).
  * TF 는 4h·1d 뿐이다. calibrate 가 그 둘만 검증했다 (스펙 §1 비목표).
  */
-export function StartScreen() {
+export function RandomSetupScreen() {
   const config = useQuizStore((s) => s.config)
   const setConfig = useQuizStore((s) => s.setConfig)
   const start = useQuizStore((s) => s.start)
+  const goHome = useQuizStore((s) => s.goHome)
 
   return (
     <div className="center-box">
-      <h1>chart-drill</h1>
-      <p>차트를 보고 판단하고, 근거까지 채점받는다.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>랜덤 실전 연습</h2>
+        <button onClick={goHome} className="secondary">돌아가기</button>
+      </div>
+      <p>랜덤한 차트를 생성하여 실전 감각을 기릅니다.</p>
 
       <div className="config-row">
         <label>

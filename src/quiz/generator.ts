@@ -107,6 +107,7 @@ export function makeQuestion(
     htfCs?: Candle[]; htfTf?: Timeframe
     warmup?: number; visible?: number; hidden?: number
     minEvidence?: number; maxEvidence?: number
+    requiredTags?: string[]
   } = {},
 ): Question | null {
   const warmup = opts.warmup ?? WARMUP
@@ -131,6 +132,11 @@ export function makeQuestion(
 
   const active = activeSignalsAt(window, decisionIndex, tf, windowHtf, opts.htfTf)
   if (active.length < minEvidence || active.length > maxEvidence) return null
+  
+  if (opts.requiredTags && opts.requiredTags.length > 0) {
+    const hasRequired = active.some(s => opts.requiredTags!.includes(s.id))
+    if (!hasRequired) return null
+  }
 
   const { direction } = classifyOutcome(window, decisionIndex, hidden)
   const dom = dominantSide(active)

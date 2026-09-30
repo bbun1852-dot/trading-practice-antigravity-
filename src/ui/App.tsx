@@ -3,7 +3,10 @@
  * 오답노트는 phase 와 독립된 오버레이 축이다.
  */
 import { useQuizStore } from './store'
-import { StartScreen } from './screens/StartScreen'
+import { HomeMenuScreen } from './screens/HomeMenuScreen'
+import { RandomSetupScreen } from './screens/RandomSetupScreen'
+import { CampaignMapScreen } from './screens/CampaignMapScreen'
+import { CampaignIntroScreen } from './screens/CampaignIntroScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { AnsweringScreen } from './screens/AnsweringScreen'
 import { ReplayScreen } from './screens/ReplayScreen'
@@ -24,7 +27,10 @@ export function App() {
         <button onClick={openNotebook}>오답노트</button>
       </header>
       <main className="screen">
-        {phase === 'idle' && <StartScreen />}
+        {phase === 'idle' && <HomeMenuScreen />}
+        {phase === 'random_setup' && <RandomSetupScreen />}
+        {phase === 'campaign_map' && <CampaignMapScreen />}
+        {phase === 'campaign_intro' && <CampaignIntroScreen />}
         {phase === 'loading' && <LoadingScreen />}
         {phase === 'answering' && <AnsweringScreen />}
         {phase === 'replaying' && <ReplayScreen />}
@@ -37,11 +43,13 @@ export function App() {
 
 function phaseLabel(p: string): string {
   switch (p) {
-    case 'idle': return '대기'
-    case 'loading': return '출제 중'
-    case 'answering': return '풀이'
-    case 'replaying': return '재생'
-    case 'review': return '복기'
+    case 'idle': return '홈'
+    case 'random_setup': return '랜덤설정'
+    case 'campaign_map': return '캠페인맵'
+    case 'loading': return '문제 출제중'
+    case 'answering': return '풀이중'
+    case 'replaying': return '결과재생'
+    case 'review': return '정답확인'
     default: return p
   }
 }

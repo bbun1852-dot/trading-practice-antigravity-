@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useQuizStore } from '../store'
 import { generateQuestion, type Stage } from '../pipeline'
+import { CAMPAIGN_STAGES } from '../../quiz/campaignStages'
 
 export function LoadingScreen() {
   const config = useQuizStore((s) => s.config)
@@ -26,10 +27,15 @@ export function LoadingScreen() {
     setStage(null)
     setError(null)
 
+    const requiredTags = config.campaignStage 
+      ? CAMPAIGN_STAGES.find(s => s.id === config.campaignStage)?.requiredTags 
+      : undefined
+
     generateQuestion({
       symbol: config.symbol,
       tf: config.tf,
       signal: controller.signal,
+      requiredTags,
       onStage: (s) => { if (!controller.signal.aborted) setStage(s) },
     }).then(
       (q) => { if (!controller.signal.aborted) questionReady(q) },
@@ -40,7 +46,7 @@ export function LoadingScreen() {
     )
 
     return () => controller.abort()
-  }, [config.symbol, config.tf, questionReady, attempt])
+  }, [config.symbol, config.tf, config.campaignStage, questionReady, attempt])
 
   if (error) {
     return (

@@ -79,16 +79,17 @@ export type Stage = {
 }
 
 export type GenerateOptions = {
-  /** null·생략 = SYMBOL_POOL 에서 랜덤 */
+  /** null|undefined = SYMBOL_POOL 에서 랜덤  */
   symbol?: string | null
-  /** null·생략 = DRILL_TIMEFRAMES 에서 랜덤 */
+  /** null|undefined = DRILL_TIMEFRAMES 에서 랜덤  */
   tf?: DrillTimeframe | null
   rng?: () => number
-  /** 기본값은 IndexedDB 캐시. 테스트가 오프라인 캔들을 주입한다 */
+  /** 로컬에 저장된 IndexedDB 캐시. 없을 시 기본 캐시 사용  */
   loadCandles?: CandleLoader
   onStage?: (s: Stage) => void
-  /** 화면이 떠난 뒤 계산을 계속 태우지 않기 위한 중단 신호 (AbortSignal 호환) */
+  /** 중단 시그널 */
   signal?: { readonly aborted: boolean }
+  requiredTags?: string[]
 }
 
 /**
@@ -180,7 +181,11 @@ async function questionFrom(
     checkAborted(signal)
 
     for (const cand of shuffle(candidatesIn(cs, tf, htfCs, range), rng)) {
-      const q = makeQuestion(cs, symbol, tf, cand, { htfCs, htfTf: HIGHER_TF[tf] })
+      const q = makeQuestion(cs, symbol, tf, cand, { 
+        htfCs, 
+        htfTf: HIGHER_TF[tf],
+        requiredTags: opts.requiredTags 
+      })
       if (q) {
         onStage?.({ kind: 'compose', symbol, tf })
         return q

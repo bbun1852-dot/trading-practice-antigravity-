@@ -14,19 +14,24 @@
  */
 import { create } from 'zustand'
 import { solverView } from '../quiz/generator'
-import { grade } from '../quiz/grader'
+import { grade, gradeCampaign } from '../quiz/grader'
+import { CAMPAIGN_STAGES } from '../quiz/campaignStages'
 import type { Direction, GradeReport, Question, SolverView } from '../quiz/types'
 import { IndexedDBNotebook, type ReviewEntry } from '../data/notebook'
 import type { DrillTimeframe } from './pipeline'
 import type { DrawingType, UserDrawing } from './chart/drawingTypes'
+import { useCampaignStore } from './campaignStore'
 
-export type Phase = 'idle' | 'loading' | 'answering' | 'replaying' | 'review'
+export type Phase = 'idle' | 'random_setup' | 'campaign_map' | 'campaign_intro' | 'loading' | 'answering' | 'replaying' | 'review'
 
 /**
- * 다음 문제를 어디서 낼지. 둘 다 null 이 기본이고 "랜덤" 을 뜻한다.
- * 상태 머신 밖의 값이라 어느 단계에서든 바꿀 수 있다 — 다음 생성부터 반영된다.
+ * 설정 객체. 캠페인 모드의 경우 campaignStage ID 가 설정됨
  */
-export type Config = { symbol: string | null; tf: DrillTimeframe | null }
+export type Config = { 
+  symbol: string | null; 
+  tf: DrillTimeframe | null;
+  campaignStage?: number | null;
+}
 
 export type Draft = {
   /** null = 아직 방향을 고르지 않음. 기본값을 주지 않는다 — 명시적 선택이 답안이다 */
@@ -63,6 +68,11 @@ export type QuizStore = {
   toggleIndicator: (id: 'bb' | 'rsi' | 'macd') => void
 
   setConfig(c: Partial<Config>): void
+  goToRandomSetup(): void
+  goToCampaignMap(): void
+  startCampaignStage(stageId: number): void
+  startLoadingCampaign(): void
+  goHome(): void
   start(): void
   questionReady(q: Question): void
   setDirection(d: Direction): void
@@ -115,8 +125,24 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
     set((s) => ({ config: { ...s.config, ...c } }))
   },
 
+  goHome() {
+    set({ phase: 'idle', config: { symbol: null, tf: null, campaignStage: null } })
+  },
+  goToRandomSetup() {
+    set({ phase: 'random_setup' })
+  },
+  goToCampaignMap() {
+    set({ phase: 'campaign_map', config: { ...get().config, campaignStage: null } })
+  },
+  startCampaignStage(stageId) {
+    set((s) => ({ phase: 'campaign_intro', config: { ...s.config, campaignStage: stageId } }))
+  },
+  startLoadingCampaign() {
+    set({ phase: 'loading' })
+  },
+
   start() {
-    if (get().phase !== 'idle') return
+    if (get().phase !== 'random_setup') return
     set({ phase: 'loading' })
   },
 
@@ -223,10 +249,8 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
 
   submit() {
     const s = get()
-    // 방향 미선택이거나 answering 단계가 아니면 무시
     if (s.phase !== 'answering' || s.draft.direction === null || !s.question) return
     
-    // 채점 (U2: answering 단계에서는 계산하지 않고, 제출 시점에만 계산)
     const answer = {
       direction: s.draft.direction,
       entry: s.draft.entry,
@@ -235,7 +259,22 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       tags: Array.from(s.draft.tags),
       memo: s.draft.memo,
     }
-    const report = grade(s.question, answer)
+    
+    let report: GradeReport;
+    if (s.config.campaignStage) {
+      const requiredTags = CAMPAIGN_STAGES.find(stage => stage.id === s.config.campaignStage)?.requiredTags || [];
+      report = gradeCampaign(s.question, answer, requiredTags);
+    } else {
+      report = grade(s.question, answer)
+    }
+
+    if (s.config.campaignStage) {
+      let stars = 0
+      if (report.score >= 90) stars = 3
+      else if (report.score >= 80) stars = 2
+      else if (report.score >= 60) stars = 1
+      useCampaignStore.getState().setStars(s.config.campaignStage, stars)
+    }
 
     set({ phase: 'replaying', report, replay: { revealed: 0, playing: true, speed: 1 } })
   },
@@ -285,15 +324,27 @@ export const useQuizStore = create<QuizStore>()((set, get) => ({
       }
     }
 
-    set({
-      phase: 'loading',
-      view: null,
-      question: null,
-      draft: emptyDraft(),
-      report: null,
-      replay: { revealed: 0, playing: false, speed: 1 },
-    })
-  },
+      if (s.config.campaignStage) {
+        set({
+          phase: 'campaign_map',
+          view: null,
+          question: null,
+          draft: emptyDraft(),
+          report: null,
+          replay: { revealed: 0, playing: false, speed: 1 },
+          config: { ...s.config, campaignStage: null }
+        })
+      } else {
+        set({
+          phase: 'loading',
+          view: null,
+          question: null,
+          draft: emptyDraft(),
+          report: null,
+          replay: { revealed: 0, playing: false, speed: 1 },
+        })
+      }
+    },
 
   openNotebook() {
     set({ notebookOpen: true })

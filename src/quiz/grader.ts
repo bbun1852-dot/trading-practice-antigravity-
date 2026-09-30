@@ -452,3 +452,50 @@ export function grade(q: Question, a: Answer, opts: { coreK?: number } = {}): Gr
     replay: execution.orderValid ? rep : null,
   }
 }
+export function gradeCampaign(q: Question, a: Answer, requiredTags: string[]): GradeReport {
+  const hiddenCount = q.candles.length - q.decisionIndex - 1
+  const active = activeSignalsAt(q.candles.slice(0, q.decisionIndex + 1), q.decisionIndex)
+  const { direction: correct } = classifyOutcome(q.candles, q.decisionIndex, hiddenCount)
+  const rep = replay(q, a)
+
+  const directionScore = (correct === a.direction || a.direction === 'flat') ? (correct === a.direction ? 30 : 0) : 0
+  const directionObj = { correct, answered: a.direction, score: directionScore }
+
+  // Check required tags
+  const activeTargetTags = active.filter((s: ActiveSignal) => requiredTags.includes(s.id)).map((s: ActiveSignal) => s.id)
+  let tagScore = 0
+  
+  if (activeTargetTags.length === 0) {
+    tagScore = 50
+  } else {
+    const userFound = activeTargetTags.some((t: string) => a.tags.includes(t))
+    if (userFound) {
+      tagScore = 50
+    }
+  }
+
+  const isProfitable = rep && rep.r > 0
+  const execScore = isProfitable ? 20 : 0
+
+  const totalScore = directionScore + tagScore + execScore
+
+  const hits = a.tags.filter((t: string) => activeTargetTags.includes(t))
+  const coreMisses = activeTargetTags.filter((t: string) => !a.tags.includes(t))
+  const falseClaims = a.tags.filter((t: string) => requiredTags.includes(t) && !activeTargetTags.includes(t))
+  const reference = active.map((s: ActiveSignal) => s.id).filter((t: string) => !a.tags.includes(t) && !coreMisses.includes(t))
+
+  return {
+    direction: directionObj,
+    execution: { score: execScore, max: 20, notes: isProfitable ? ['수익 달성'] : ['수익 없음'], orderValid: true },
+    evidence: { 
+      score: tagScore, 
+      verdict: { hits, coreMisses, falseClaims, reference } 
+    },
+    processScore: tagScore + execScore,
+    processMax: 70,
+    outcomeScore: directionScore,
+    totalScore,
+    applicableMax: 100,
+    replay: rep,
+  }
+}

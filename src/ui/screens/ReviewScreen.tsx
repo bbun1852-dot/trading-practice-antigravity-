@@ -106,12 +106,16 @@ export function ReviewScreen() {
 
       <footer className="answer-bar">
         <textarea 
-          placeholder="복기 메모 (선택)" 
+          placeholder="오답 노트 (선택)" 
           value={draft.memo}
           onChange={(e) => useQuizStore.getState().setMemo(e.target.value)}
         />
         <span className="spacer" />
-        <button className="primary" onClick={next}>다음 문제</button>
+        {useQuizStore.getState().config.campaignStage ? (
+          <button className="primary" onClick={next}>캠페인 맵으로</button>
+        ) : (
+          <button className="primary" onClick={next}>다음 문제</button>
+        )}
       </footer>
     </div>
   )
